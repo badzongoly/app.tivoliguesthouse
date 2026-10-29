@@ -1,0 +1,6 @@
+Require local
+<FilesMatch "(?i)(\.(sql|log|md|bak)$|^error_log$|^db.*\.php$)">
+Require all denied
+</FilesMatch>
+RewriteEngine On
+RewriteRule ^(?:\.git|\.local-setup|docs|\.github)(?:/|$) - [F,L]

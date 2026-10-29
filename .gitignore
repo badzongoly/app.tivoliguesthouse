@@ -1,0 +1,20 @@
+/db.php
+/db - Copy.php
+/.local-setup/
+/.well-known/
+/cgi-bin/
+*.sql
+*.sql.*
+*.log
+error_log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+/vendor/
+/node_modules/
+/.idea/
+/.vscode/
