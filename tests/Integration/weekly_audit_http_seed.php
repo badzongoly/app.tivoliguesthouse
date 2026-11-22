@@ -1,0 +1,6 @@
+<?php
+require __DIR__.'/weekly_audits.php';
+$new=$legacy->execute($staff,'room_audit',['room_id'=>(string)$room,'result'=>'corrective','reason'=>'Synthetic HTTP curtain repair'],wk());$id=$new['followup_id'];wc($owner,'assign',wv($owner,$id)+['assignee'=>(string)$staff,'due_date'=>'2036-11-20']);
+$areas=\Tivoli\Service\AuditAreas::current($r);$areaEntry=current(array_filter($areas['entries'],fn($entry)=>$entry['active']));$history=\Tivoli\Service\WeeklyAreaAudit::record($r,['area_revision'=>$areas['revision'],'area_id'=>$areaEntry['id'],'result'=>'corrective'],$clock);$historyKey=$history['audit']['audit_key'];$a->audit($owner,'stay.area_audit','area_audit',$historyKey,'succeeded',$history['audit']);
+for($i=0;$i<51;$i++)$a->audit($owner,'stay.area_followup','area_audit',$historyKey,'succeeded',['audit_key'=>$historyKey,'status'=>'in_progress','owner'=>'Synthetic original team','due_date'=>'2036-11-20','comment'=>'Synthetic original progress '.$i]);
+$fixture=['room'=>$room,'id'=>$id,'history_key'=>$historyKey,'users'=>[]];foreach(['staff'=>$staff,'other'=>$other,'admin'=>$admin] as $label=>$uid)$fixture['users'][$label]=['id'=>$uid,'email'=>$r->run('SELECT email FROM users WHERE id=?',[$uid])->fetchColumn()];file_put_contents(dirname(__DIR__,2).'/.local-setup/weekly-audit-http-fixture.json',json_encode($fixture,JSON_THROW_ON_ERROR));

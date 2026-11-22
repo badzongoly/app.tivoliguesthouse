@@ -1,0 +1,148 @@
+[
+  {
+    "id": "1",
+    "title": "Secure and inspect",
+    "items": [
+      {
+        "id": "d1_1",
+        "text": "Open curtains and ventilate the room where practical."
+      },
+      {
+        "id": "d1_2",
+        "text": "Check for belongings, damage, stains, missing items and maintenance problems."
+      },
+      {
+        "id": "d1_3",
+        "text": "Record and report problems immediately, with photographs where appropriate."
+      },
+      {
+        "id": "d1_4",
+        "text": "Label and secure forgotten belongings with the room number, date and finder’s name."
+      },
+      {
+        "id": "d1_5",
+        "text": "Remove rubbish and used toiletries. Handle sharp or suspicious items carefully."
+      }
+    ]
+  },
+  {
+    "id": "2",
+    "title": "Strip the bed and collect laundry",
+    "items": [
+      {
+        "id": "d2_1",
+        "text": "Remove all used sheets, pillowcases, towels and bathmats—even if they appear clean."
+      },
+      {
+        "id": "d2_2",
+        "text": "Check mattress protectors, pillows and bedding for stains, dampness or signs of pests; report concerns."
+      },
+      {
+        "id": "d2_3",
+        "text": "Keep dirty laundry separate from clean linen; do not place it on the floor."
+      },
+      {
+        "id": "d2_4",
+        "text": "Replace any soiled or damaged mattress protector."
+      }
+    ]
+  },
+  {
+    "id": "3",
+    "title": "Clean the bedroom",
+    "items": [
+      {
+        "id": "d3_1",
+        "text": "Dust furniture, headboard, shelves, windowsills and other surfaces."
+      },
+      {
+        "id": "d3_2",
+        "text": "Clean frequently touched points: door handles, switches, remote controls and wardrobe handles."
+      },
+      {
+        "id": "d3_3",
+        "text": "Clean mirrors and visible marks on glass."
+      },
+      {
+        "id": "d3_4",
+        "text": "Clean inside drawers and wardrobes; check under the bed and behind accessible furniture."
+      },
+      {
+        "id": "d3_5",
+        "text": "Sweep or vacuum, then mop as appropriate, including corners."
+      },
+      {
+        "id": "d3_6",
+        "text": "Make the bed with fresh, dry, stain-free linen."
+      }
+    ]
+  },
+  {
+    "id": "4",
+    "title": "Clean the bathroom",
+    "items": [
+      {
+        "id": "d4_1",
+        "text": "Use separate bathroom cloths and equipment; keep toilet-cleaning materials separate."
+      },
+      {
+        "id": "d4_2",
+        "text": "Clean and disinfect the toilet, including the seat, flush control, base and surrounding floor."
+      },
+      {
+        "id": "d4_3",
+        "text": "Clean the sink, taps, shower area, tiles and bathroom door handles."
+      },
+      {
+        "id": "d4_4",
+        "text": "Remove hair and debris from accessible drain covers; report slow drainage or leaks."
+      },
+      {
+        "id": "d4_5",
+        "text": "Clean the mirror and remove soap marks."
+      },
+      {
+        "id": "d4_6",
+        "text": "Empty and clean the bin; replace its liner."
+      },
+      {
+        "id": "d4_7",
+        "text": "Mop the floor and leave it dry."
+      },
+      {
+        "id": "d4_8",
+        "text": "Supply fresh towels, bathmat, toilet paper and the agreed guest toiletries."
+      }
+    ]
+  },
+  {
+    "id": "5",
+    "title": "Test and reset",
+    "items": [
+      {
+        "id": "d5_1",
+        "text": "Test lights, sockets visually, TV and remote controls."
+      },
+      {
+        "id": "d5_2",
+        "text": "Test the air conditioner; check cooling, unusual noise and leaking water."
+      },
+      {
+        "id": "d5_3",
+        "text": "Check water supply, shower, hot water where provided, and toilet flushing."
+      },
+      {
+        "id": "d5_4",
+        "text": "Check the room door, lock, windows and curtains."
+      },
+      {
+        "id": "d5_5",
+        "text": "Replenish the room’s standard supplies and arrange furniture neatly."
+      },
+      {
+        "id": "d5_6",
+        "text": "Switch off equipment or set it according to Tivoli’s room-preparation policy."
+      }
+    ]
+  }
+]

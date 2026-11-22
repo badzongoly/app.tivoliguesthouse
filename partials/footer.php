@@ -1,1 +1,0 @@
-<footer class="py-4 text-center text-secondary">© <?php echo date('Y'); ?> HotelPOS</footer>

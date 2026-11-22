@@ -1,0 +1,9 @@
+<?php if(!isset($workspace)) {require_once dirname(__DIR__).'/layouts/context.php';$workspace=workspace_context($user);} ?>
+<header class="app-topbar">
+ <div class="app-topbar-start"><button class="app-menu-button" id="app-menu" type="button" aria-label="Toggle navigation" aria-controls="app-sidebar" aria-expanded="false"><?=workspace_icon('menu')?></button><div><span class="app-property">Tivoli Guesthouse</span><span class="app-breadcrumb">Workspace <span aria-hidden="true">/</span> <strong><?=access_h($workspace['title'])?></strong></span></div></div>
+ <div class="app-topbar-end"><time datetime="<?=gmdate('Y-m-d')?>"><?=gmdate('D, j M Y')?> <small>UTC</small></time>
+ <?php if(!$workspace['locked'] && $workspace['pending']):?><a class="app-pending" href="<?=access_h(access_url('expenses.php#submission-queue'))?>"><?=(int)$workspace['pending']?> pending</a><?php endif?>
+ <?php if(!$workspace['locked']):?><a class="app-pending app-reminders-link" href="<?=access_h(access_url('reminders.php'))?>">Reminders</a><?php endif?>
+ <details class="app-account"><summary aria-label="Account menu for <?=access_h($user['name'] ?? 'staff')?>"><span class="app-avatar" aria-hidden="true"><?=access_h(mb_substr($user['name'] ?? 'T',0,1))?></span><span class="app-account-name"><?=access_h($user['name'] ?? '')?><small><?=access_h(implode(', ',$workspace['roles']))?></small></span><span aria-hidden="true">⌄</span></summary><div class="app-account-menu"><strong><?=access_h($user['name'] ?? '')?></strong><a href="<?=access_h(access_url('auth/change-password.php'))?>">Change Password</a><a href="<?=access_h(access_url('reminders.php?page=settings'))?>">Notification Preferences</a><form method="post" action="<?=access_h(access_url('auth/logout.php'))?>"><input type="hidden" name="csrf" value="<?=access_h(access_csrf())?>"><button type="submit">Sign Out</button></form></div></details>
+ </div>
+</header>

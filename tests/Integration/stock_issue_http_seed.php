@@ -1,0 +1,6 @@
+<?php
+require __DIR__.'/stock_issue_helpers.php';
+$clock=gmdate('Y-m-d H:i:s');$si=new \Tivoli\Service\StockIssueService($a,$clock);$x=sx('24.00');$id=$si->execute($staff,'report',['extra_id'=>(string)$x,'kind'=>'damage','qty'=>'2.00','position'=>'held','actual_at'=>str_replace(' ','T',$clock),'verified'=>'1','comment'=>'Synthetic browser damaged bottles'],sk())['id'];
+$viewer=su();$r->run('INSERT INTO security_roles(name,description,system_role) VALUES(?,?,0)',['finance-only-'.sk(),'Synthetic finance-only role']);$role=(int)$r->db->lastInsertId();$r->run("INSERT INTO security_role_privileges(role_id,privilege_id) SELECT ?,id FROM security_privileges WHERE code='reports.view'",[$role]);$r->run('DELETE FROM security_user_roles WHERE user_id=?',[$viewer]);$r->run('INSERT INTO security_user_roles(user_id,role_id) VALUES(?,?)',[$viewer,$role]);
+$users=[];foreach(['staff'=>$staff,'other'=>$other,'admin'=>$admin,'viewer'=>$viewer] as $name=>$uid)$users[$name]=['id'=>$uid,'email'=>$r->run('SELECT email FROM users WHERE id=?',[$uid])->fetchColumn()];
+file_put_contents(dirname(__DIR__,2).'/.local-setup/stock-issue-http-fixture.json',json_encode(['id'=>$id,'extra'=>$x,'users'=>$users],JSON_PRETTY_PRINT));echo "Synthetic stock issue fixture ready.\n";

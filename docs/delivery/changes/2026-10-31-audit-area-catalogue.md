@@ -1,0 +1,15 @@
+# Area Audit Form and Catalogue Change Record
+
+Risk: operational form/input and admin-settings change. Acceptance: Room Audit-style form, controlled Area dropdown, admin add/rename/deactivate/reactivate, immutable historical names, retained follow-ups, strict server validation and UTF-8 verification. No financial arithmetic, grants or schema change.
+
+## Simple Area Audit and configurable area list — 2026-10-31
+
+Implemented the owner's requested Room Audit-style form: required Area dropdown, optional Action Owner / Due Date, required overall Result (Pass / Corrective Action / Unsafe), optional Comment, and horizontally aligned Record Action / Cancel. Removed the six separate checks, free-text area and manual audit-date fields from new submissions. Actual audit date/week is captured on the server. Corrective/Unsafe follow-up and existing history remain operational.
+
+Settings → Audit Areas lets authorised administrators add, rename, deactivate and reactivate areas. Defaults are the previous eight suggested shared/service/outdoor areas. Stable area IDs and versioned full catalogue snapshots are stored in append-only stay.area_catalogue events; no schema migration or inferred mapping of earlier free-text audits. Settings require existing admin, hr.settings, rooms.manage and bookings.manage authority, CSRF and persistent operation identity. The catalogue allows at most100 entries,120-character names, rejects duplicate names and stale revisions, and retains inactive entries rather than deleting referenced identities.
+
+New audits require a currently active area ID and the current area-list revision server-side. The area name/ID/revision are snapshotted, so later rename/deactivation cannot change past audit display or prevent historical follow-up. Older detailed audits retain their original checks and dates. The register renders both forms without rewriting history. Empty optional fields are accepted, while invalid overall results/areas and stale forms are rejected.
+
+Executed:134 guarded DB assertions;121 HTTP assertions;29 views at1440/390/320px plus exact simplified-form/action-focus checks;11 changed PHP files linted; mobile Area Audit screenshot visually inspected; source encoding scan and git diff --check passed with existing unrelated line-ending warnings. Tests cover new Settings area creation, rename snapshot retention, deactivation rejection, reactivation, permissions and stale settings/forms. Existing stock/payment/room-lifecycle and audit follow-up regressions remain covered. Used only exact127.0.0.1:3307/tivoli_auth_test and marked8099 HTTP server. No ordinary historical/financial changes, migrations, new role grants, Git state changes, push or production deployment. Applied to local source checkout only.
+
+Recovery: scoped forward code fix, retaining all catalogue revisions and audit/follow-up events. Do not restore an older free-text area writer that bypasses the active-list policy. Catalogue events are authoritative operational records and must not be pruned.

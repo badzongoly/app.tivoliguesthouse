@@ -6,6 +6,8 @@ Applies to the whole Tivoli Guesthouse POS repository.
 
 The 2026-10-28 source baseline uses `mysqli`, `admin`/`clerk`, UTC and existing extras/stock/recovery writers. Read [CODEBASE_REVIEW.md](docs/CODEBASE_REVIEW.md) and [LEGACY_CONTRACTS.md](docs/LEGACY_CONTRACTS.md); address known security/integrity hazards before broad extraction. Never replace the global connector or rename stored roles/statuses as a first step.
 
+**Read [docs/updated_sop.md](docs/updated_sop.md) before planning or changing POS workflows.** Use it to align operations with the owner-confirmed baseline and approved procedures. Treat target procedures and pending verification as separate from implemented controls. Record conflicts with code or policy and verify behavior before relying on a control. Keep all historical financial records and links intact. Use only authorized, traceable compensating entries for corrections.
+
 Always enforce these core rules:
 
 - Preserve every historical financial event and its booking, receipt, and staff links. Never delete, silently overwrite, reset, renumber, or conceal history. Corrections require traceable compensating entries.

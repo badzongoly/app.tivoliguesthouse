@@ -1,0 +1,6 @@
+'use strict';
+document.querySelectorAll('.corrections form[data-confirm]').forEach(form=>form.addEventListener('submit',event=>{if(!window.confirm(form.dataset.confirm))event.preventDefault();}));
+const form=document.getElementById('gc-request');
+if(form){const money=n=>(n<0n?'-':'')+'GHS '+((n<0n?-n:n)/100n)+'.'+((n<0n?-n:n)%100n).toString().padStart(2,'0');const update=()=>{const output=form.querySelector('[data-gc-preview]');try{const value=form.elements.amount.value;if(!/^\d{1,10}(\.\d{1,2})?$/.test(value))throw Error('Enter a valid total charge with up to two decimal places.');const parts=value.split('.'),after=BigInt(parts[0])*100n+BigInt((parts[1]||'').padEnd(2,'0')),before=BigInt(form.dataset.before),delta=after-before,balance=BigInt(form.dataset.balance)+delta;output.textContent='Charge / Revenue Adjustment '+money(delta)+' · Guest Balance '+money(balance)+' · Actual Money Moved GHS 0.00. Receipts and stock stay unchanged.';}catch(error){output.textContent=error.message;}};form.addEventListener('input',update);update();}
+document.querySelector('[data-gc-print]')?.addEventListener('click',()=>window.print());
+const target=document.getElementById('gc-error')||document.getElementById('gc-status')||(location.hash==='#charge-action'?document.getElementById('charge-action'):null);if(target){target.focus();target.scrollIntoView({block:'start'});}

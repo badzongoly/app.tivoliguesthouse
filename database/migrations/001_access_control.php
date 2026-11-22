@@ -1,0 +1,15 @@
+<?php
+return [
+"CREATE TABLE IF NOT EXISTS security_state (id INT PRIMARY KEY) ENGINE=InnoDB",
+"INSERT IGNORE INTO security_state(id) VALUES(1)",
+"CREATE TABLE IF NOT EXISTS security_accounts (user_id INT PRIMARY KEY, active TINYINT NOT NULL DEFAULT 1, session_version INT NOT NULL DEFAULT 1, must_change_password TINYINT NOT NULL DEFAULT 0, CONSTRAINT security_account_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT) ENGINE=InnoDB",
+"CREATE TABLE IF NOT EXISTS security_roles (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(60) NOT NULL UNIQUE, description VARCHAR(255) NOT NULL, system_role TINYINT NOT NULL DEFAULT 0) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+"CREATE TABLE IF NOT EXISTS security_privileges (id INT AUTO_INCREMENT PRIMARY KEY, code VARCHAR(80) NOT NULL UNIQUE, description VARCHAR(255) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+"CREATE TABLE IF NOT EXISTS security_role_privileges (role_id INT NOT NULL, privilege_id INT NOT NULL, PRIMARY KEY(role_id,privilege_id), FOREIGN KEY(role_id) REFERENCES security_roles(id) ON DELETE RESTRICT, FOREIGN KEY(privilege_id) REFERENCES security_privileges(id) ON DELETE RESTRICT) ENGINE=InnoDB",
+"CREATE TABLE IF NOT EXISTS security_user_roles (user_id INT NOT NULL, role_id INT NOT NULL, PRIMARY KEY(user_id,role_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT, FOREIGN KEY(role_id) REFERENCES security_roles(id) ON DELETE RESTRICT) ENGINE=InnoDB",
+"CREATE TABLE IF NOT EXISTS security_audit (id BIGINT AUTO_INCREMENT PRIMARY KEY, occurred_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), actor_id INT NULL, action VARCHAR(80) NOT NULL, target_type VARCHAR(40) NOT NULL, target_id VARCHAR(80) NULL, outcome VARCHAR(20) NOT NULL, request_id CHAR(32) NOT NULL, ip_hash CHAR(64) NOT NULL, details LONGTEXT NOT NULL, FOREIGN KEY(actor_id) REFERENCES users(id) ON DELETE RESTRICT, INDEX audit_time(occurred_at), INDEX audit_actor(actor_id,id), INDEX audit_target(target_type,target_id), INDEX audit_action(action,id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+"CREATE TABLE IF NOT EXISTS security_throttle (bucket CHAR(64) PRIMARY KEY, attempts INT NOT NULL, started_at DATETIME NOT NULL) ENGINE=InnoDB",
+"CREATE TABLE IF NOT EXISTS security_password_resets (id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id INT NOT NULL, token_hash CHAR(64) NOT NULL UNIQUE, expires_at DATETIME NOT NULL, consumed_at DATETIME NULL, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT) ENGINE=InnoDB",
+"CREATE TRIGGER IF NOT EXISTS security_audit_no_update BEFORE UPDATE ON security_audit FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Audit events are append-only'",
+"CREATE TRIGGER IF NOT EXISTS security_audit_no_delete BEFORE DELETE ON security_audit FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Audit events are append-only'"
+];

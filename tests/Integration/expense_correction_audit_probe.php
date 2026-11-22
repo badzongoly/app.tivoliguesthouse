@@ -1,0 +1,2 @@
+<?php
+if(PHP_SAPI!=='cli')exit(1);putenv('TIVOLI_TEST_MODE=1');require dirname(__DIR__,2).'/bootstrap/stays.php';$r=access_service()->repo;if((int)$r->run('SELECT @@port')->fetchColumn()!==3307||$r->run('SELECT DATABASE()')->fetchColumn()!=='tivoli_auth_test'||$r->run('SELECT marker FROM security_test_marker')->fetchColumn()!=='synthetic-auth-only-v1')exit(2);$id=$argv[1]??'';if(!ctype_digit($id))exit(3);echo (int)$r->run("SELECT COUNT(*) FROM security_audit WHERE action='expense_correction.viewed' AND target_type='expense_correction' AND target_id=?",[$id])->fetchColumn();

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "1",
+    "title": "Final inspection and release",
+    "items": [
+      {
+        "id": "v1_1",
+        "text": "Room smells fresh, with no lingering smoke, damp or strong chemical smell."
+      },
+      {
+        "id": "v1_2",
+        "text": "Bed and towels are clean; bathroom and floors are dry."
+      },
+      {
+        "id": "v1_3",
+        "text": "No hair, dust, rubbish, cleaning tools or personal belongings remain."
+      },
+      {
+        "id": "v1_4",
+        "text": "All reported defects have been resolved or the room has been blocked from sale."
+      },
+      {
+        "id": "v1_5",
+        "text": "Record cleaning completion and the final inspection."
+      },
+      {
+        "id": "v1_6",
+        "text": "Change room status to Ready / Available only after passing inspection."
+      }
+    ]
+  }
+]

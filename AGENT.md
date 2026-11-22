@@ -2,6 +2,16 @@
 
 Applies to the entire repository. Read this before changing code. Reviewed against the owner's supplied code/database snapshots: 2026-10-28.
 
+## Evidence-based advice and constructive challenge
+
+- The owner expects independent engineering judgment, not automatic agreement. Treat suggestions as proposals to evaluate against Tivoli's SOP, actual workflows, legacy contracts, security, usability and financial integrity.
+- Before endorsing a material design or operational change, investigate relevant code and documentation thoroughly and research authoritative external sources where useful or required. Distinguish verified facts, assumptions and proposed policy; cite the evidence behind recommendations.
+- When evidence supports a better approach, explain the concrete drawback of the suggestion, propose a practical alternative and its trade-offs, and make a clear recommendation. Respect the owner's final explicit decision while retaining applicable safeguards. Do not invent objections or research claims merely to appear critical.
+
+## Simple workflows
+
+Prefer the simplest workflow that safely achieves the task. Keep the normal path short, show immediate previews, and reveal additional steps only for real exceptions or reconciliation. Preserve required authorization, financial evidence and audit controls.
+
 ## Mission and priorities
 
 Modernise a live procedural PHP POS in small, verifiable steps: introduce useful classes, PDO prepared statements, stronger security, staff accountability, and carefully scoped features. Keep reception working and preserve the financial record.
@@ -92,3 +102,7 @@ The final handoff must state: what changed and why; files/contracts affected; co
 | Deployment, restore, incident | [Operations](docs/OPERATIONS.md) |
 | Any implementation or review | [Contributing](CONTRIBUTING.md), [change template](docs/CHANGE_TEMPLATE.md) |
 
+
+## Windows source encoding
+
+Read and write first-party source as UTF-8 explicitly. In Python always pass `encoding="utf-8"` (or `utf-8-sig` when accepting an existing BOM) to text reads/writes; never rely on the Windows locale default. Preserve valid Unicode punctuation and names. Scan changed UI sources for reversible mojibake and verify rendered pages before handoff. Never blanket-normalise stored guest or financial history to fix a source encoding issue.

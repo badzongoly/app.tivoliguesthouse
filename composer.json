@@ -1,0 +1,9 @@
+{
+  "name": "tivoli/guesthouse-pos",
+  "description": "Tivoli Guesthouse POS",
+  "type": "project",
+  "autoload": { "psr-4": { "Tivoli\\": "src/" } },
+  "require": {
+    "phpmailer/phpmailer": "^7.1"
+  }
+}

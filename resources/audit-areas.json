@@ -1,0 +1,42 @@
+[
+  {
+    "id": "a1",
+    "name": "Reception",
+    "active": true
+  },
+  {
+    "id": "a2",
+    "name": "Lobby & Common Areas",
+    "active": true
+  },
+  {
+    "id": "a3",
+    "name": "Corridors & Stairways",
+    "active": true
+  },
+  {
+    "id": "a4",
+    "name": "Compound & Parking",
+    "active": true
+  },
+  {
+    "id": "a5",
+    "name": "Laundry",
+    "active": true
+  },
+  {
+    "id": "a6",
+    "name": "Linen & Supplies Store",
+    "active": true
+  },
+  {
+    "id": "a7",
+    "name": "Staff Areas",
+    "active": true
+  },
+  {
+    "id": "a8",
+    "name": "Utility Areas",
+    "active": true
+  }
+]

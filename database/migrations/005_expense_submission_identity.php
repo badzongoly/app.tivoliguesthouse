@@ -1,0 +1,2 @@
+<?php
+return ["CREATE TRIGGER IF NOT EXISTS expense_submission_identity BEFORE UPDATE ON expense_submissions FOR EACH ROW BEGIN IF NOT(NEW.id<=>OLD.id) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Expense submission identity is immutable'; END IF; END"];

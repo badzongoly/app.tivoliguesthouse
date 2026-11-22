@@ -1,0 +1,2 @@
+<?php
+return ["CREATE TABLE IF NOT EXISTS security_mail_queue (id BIGINT AUTO_INCREMENT PRIMARY KEY, payload LONGTEXT NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending', attempts INT NOT NULL DEFAULT 0, available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, locked_until DATETIME NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX mail_pending(status,available_at)) ENGINE=InnoDB"];
