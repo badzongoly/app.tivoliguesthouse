@@ -1,0 +1,1 @@
+(()=>{if(location.hash==='#exception-action'){const point=document.getElementById('exception-action');if(point){point.focus({preventScroll:true});point.scrollIntoView({block:'start'});}}})();

@@ -1,0 +1,15 @@
+# Encoding and Repair Evidence Change Record
+
+Risk: source text corrections and extension of existing operational upload/download flow. Acceptance: remove known malformed source punctuation throughout app, optional Repair Comment and evidence, preserve original attachments and room blocks. No money arithmetic, identity grant or schema change.
+
+## Encoding corrections and optional repair evidence — 2026-10-31
+
+Observed double-encoded punctuation in templates/stays/index.php and public/assets/js/stays.js. Corrected known reversible mojibake sequences to their intended UTF-8 punctuation (including middle-dot separators and multiplication signs). Scanned first-party public/templates/bootstrap/src/resources; no remaining known broken-character markers found. Existing UTF-8 HTML declarations are retained. Guest names, notes, database values and financial records were not rewritten or normalised. Regression checks now detect these malformed punctuation sequences in rendered pages.
+
+Repair now uses Comment (Optional) and offers optional PDF/JPEG/PNG evidence up to5MB. Server-side repair validation permits an empty comment. Existing admin-only permission, CSRF, operation identity and state controls remain. Recording repair leaves the fault awaiting inspection and the room blocked; it cannot make the room available by itself.
+
+Extended the existing protected attachment service with an explicit fault/repair allowlist, separate purpose-separated encryption and separate stay.repair_attachment_saved registry/audit events. Existing fault attachment APIs default to fault and retain their original ciphertext purpose. The fault log displays Download Repair Evidence separately from the original attachment, preserving both. The same authenticated endpoint accepts kind=repair, validates permission and integrity, audits access before disclosure, and returns safe attachment/no-store headers. Storage/key/registry backup requirements and encrypted-orphan handling from the fault upload change remain applicable. No new schema, keys or public file storage.
+
+Executed: six changed PHP files linted and JavaScript syntax checked;104 guarded occupancy integration assertions and104 HTTP assertions passed;24 views at1440/390/320px passed with character-corruption, layout and existing focus checks. Mobile Repair screenshot visually inspected. Tests include empty repair comment/file, exact repair download, preservation of original fault evidence, permissions, idempotency, audit-failure rollback and room still blocked. Source scan and git diff --check passed with existing unrelated line-ending warnings. Synthetic tests target only exact127.0.0.1:3307/tivoli_auth_test and marked8099 HTTP server. No ordinary financial mutations, history rewrites, migrations, Git state changes, push or production deployment; applied to existing local checkout.
+
+Recovery: scoped forward code fix, preserving all existing and newly recorded registry events and encrypted fault/repair evidence. Do not discard files or restore older database history during code recovery.

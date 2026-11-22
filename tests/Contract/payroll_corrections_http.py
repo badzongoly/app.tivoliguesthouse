@@ -1,0 +1,47 @@
+"""Only the marked synthetic payroll service; no ordinary localhost credentials or data."""
+from pathlib import Path
+import json,re,html,subprocess,urllib.parse,datetime
+ROOT=Path(__file__).resolve().parents[2];scope={'__file__':str(ROOT/'tests/Contract/payroll_http.py')};exec((ROOT/'tests/Contract/payroll_http.py').read_text(encoding='utf-8').split('\ncount=0')[0],scope);Browser=scope['Browser'];count=0
+def check(ok,label):
+ global count
+ assert ok,label
+ count+=1;print('PASS '+label,flush=True)
+check(Browser().request('/auth/login.php')[0]==200,'synthetic marker verified before payroll fixtures')
+subprocess.run(['C:/xampp/php/php.exe',str(ROOT/'tests/Integration/payroll_correction_http_seed.php')],cwd=ROOT,check=True,capture_output=True)
+fixture=json.loads((ROOT/'.local-setup/payroll-correction-http-fixture.json').read_text(encoding='utf-8'));owner=Browser();employee=Browser();other=Browser();admin=Browser();owner.login('admin@example.invalid','Synthetic Admin Passphrase 123!')
+for browser,key in [(employee,'employee'),(other,'other'),(admin,'admin')]:browser.login(fixture['users'][key]['email'],'Synthetic Payroll Passphrase 123!')
+root='/payroll.php';detail=root+'?id='+str(fixture['id']);correct=detail+'&form=correct';history=detail+'&page=statement&statement_id='+str(fixture['publication'])
+check(Browser().request(correct)[0]==302,'payroll corrections require login')
+check(employee.request(correct)[0]==403 and admin.request(correct)[0]==403,'only configured owner with salary authority opens correction form')
+check(employee.request(root+'?page=corrections')[0]==403 and admin.request(root+'?page=corrections')[0]==403,'private correction register denies employee and peer administrator')
+check(owner.request('/financial-corrections.php?area=payroll')[0]==302,'financial corrections link reuses existing payroll workspace')
+check('Correct Approved Payroll' in owner.request(correct)[2],'owner opens correction on the original approved payroll')
+p=owner.fields(correct,'correct')|dict(type='components',base='1000.00',allowance='150.00',overtime='50.00',deductions='25.00',employer='75.00',reason='PRIVATE-HTTP-CORRECTION-REASON',evidence_reference='PRIVATE-HTTP-COMPONENT-PROOF',employee_note='Reviewed allowance correction',verified='1')
+check(owner.request(correct,p|dict(csrf='bad'))[0]==403,'payroll correction requires CSRF')
+check(owner.request(correct,p|dict(operation_key='bad'))[0]==400,'malformed operation key never creates a fresh correction identity')
+check(owner.request(correct,p|dict(evidence_reference=''))[0]==400,'owner correction requires component or original-transfer evidence')
+proof=b'%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF';check(owner.request(correct,p,proof)[0]==302 and owner.request(correct,p,proof)[0]==302,'owner records source-linked correction once with optional private proof')
+body=owner.request(detail)[2];check('GHS 1175.00' in body and 'GHS 50.00' in body and 'Record Completed MoMo Payment' in body,'corrected net exposes exact existing top-up workflow')
+check('PRIVATE-HTTP-CORRECTION-REASON' in body and 'PRIVATE-HTTP-COMPONENT-PROOF' in body,'owner history retains private reason and reviewed evidence')
+link=html.unescape(re.search(r'href="([^"]*finance-evidence.php[^"]+)"',body)[1]);file='/finance-evidence.php?'+urllib.parse.urlsplit(link).query
+check(owner.request(file)[0]==200 and employee.request(file)[0]==403 and other.request(file)[0]==403 and admin.request(file)[0]==403,'correction file independently enforces owner-only access')
+body=employee.request(detail)[2];check('GHS 1125.00' in body and 'GHS 1175.00' not in body and 'awaiting review' in body,'employee retains old issued salary while revision awaits settlement/publication')
+check('PRIVATE-HTTP' not in body and 'Employer Costs' not in body and 'Private Recovery' not in body,'employee statement excludes private correction evidence and employer details')
+check('PRIVATE-HTTP-CORRECTION-REASON' not in admin.request('/finance.php?page=activity')[2],'general finance activity excludes private payroll correction data')
+pay=owner.fields(detail,'pay')|dict(amount='50.00',reference='HTTP-PAYROLL-TOP-UP-'+fixture['tag'],paid_at=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),verified='1',comment='PRIVATE actual completed top-up')
+check(owner.request(detail,pay)[0]==302 and owner.request(detail,pay)[0]==302,'existing partial transfer action records actual top-up only once')
+publish=owner.fields(detail,'publish')|dict(confirmed='1');check(owner.request(detail,publish)[0]==302 and owner.request(detail,publish)[0]==302,'settled corrected payroll publishes one linked revised statement')
+body=employee.request(detail)[2];check('GHS 1175.00' in body and 'Reviewed allowance correction' in body,'employee receives current issued revised figures and safe public note')
+check('PRIVATE-HTTP' not in body and 'Employer Costs' not in body,'reissued statement excludes private reason proof and employer costs')
+check('GHS 1125.00' in employee.request(history)[2] and 'GHS 1175.00' not in employee.request(history)[2],'explicit original statement link keeps original issued financial figures')
+check(other.request(history)[0]==403 and admin.request(history)[0]==403,'historical version links do not bypass employee identity')
+p=owner.fields(correct,'correct')|dict(type='payment',payment_id=str(fixture['payment']),amount='1100.00',recording_error='1',reason='PRIVATE-HTTP-PAYMENT-CORRECTION',evidence_reference='PRIVATE-HTTP-TRANSFER-PROOF',employee_note='',verified='1')
+check(owner.request(correct,p|dict(recording_error='0'))[0]==400,'payment correction requires explicit recording-error attestation')
+check(owner.request(correct,p)[0]==302,'one supported original transfer amount can be corrected separately')
+body=owner.request(detail)[2];check('GHS 1150.00' in body and 'GHS 25.00' in body,'effective split-transfer balance remains exact after payment correction')
+today=datetime.datetime.now(datetime.timezone.utc).date().isoformat();log='/finance.php?page=payments&start='+today+'&end='+today+'&direction=adjustment';body=admin.request(log)[2];check('Payroll Recording Adjustment' in body and 'HTTP-PAYROLL-ORIGINAL-'+fixture['tag'] not in body and 'PRIVATE-HTTP' not in body,'salary-authorized payment log exposes adjustment amount with private details redacted')
+p=owner.fields(correct,'correct')|dict(type='components',base='1000.00',allowance='75.00',overtime='50.00',deductions='25.00',employer='75.00',reason='PRIVATE-HTTP-OVERPAYMENT-REVIEW',evidence_reference='PRIVATE reviewed component proof',employee_note='',verified='1');check(owner.request(correct,p)[0]==302,'lower corrected net leaves actual transfers intact')
+body=owner.request(detail)[2];check('Private Recovery Due GHS 50.00' in body and 'Private Recovery / Source Follow-Up' in body and 'name="action" value="publish"' not in body,'overpayment stays private and revised publication remains blocked')
+follow=owner.fields(detail,'recovery_followup')|dict(comment='PRIVATE-HTTP recovery contact; balance remains outstanding');check(owner.request(detail,follow)[0]==302 and owner.request(detail,follow)[0]==302,'private recovery follow-up is durably idempotent')
+body=employee.request(detail)[2];check('PRIVATE-HTTP' not in body and 'Private Recovery' not in body,'private recovery notes never appear on an issued employee statement')
+fixture['corrected']=True;(ROOT/'.local-setup/payroll-correction-http-fixture.json').write_text(json.dumps(fixture),encoding='utf-8');print('TOTAL '+str(count)+' payroll correction HTTP assertions passed.')

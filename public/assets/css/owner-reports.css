@@ -1,0 +1,50 @@
+.or { color: #173e34; display: grid; gap: 1rem; min-width: 0; }
+.or > *, .or-grid > * { min-width: 0; }
+.or h1, .or h2, .or p { margin: 0; }
+.or h1 { font-size: clamp(1.75rem, 4vw, 2.7rem); }
+.or h2 { font-size: 1.2rem; margin-bottom: .55rem; }
+.or-heading { padding: 1.3rem; background: #e9f0e8; border: 1px solid #d8e3d7; border-radius: 1rem; }
+.or .or-kicker { color: #49665b; font-size: .82rem; font-weight: 700; letter-spacing: .04em; }
+.or-tabs, .or-filters, .or-pages { display: flex; gap: .55rem; flex-wrap: wrap; align-items: end; }
+.or-tabs a, .or-pages a { display: inline-block; padding: .5rem .7rem; border: 1px solid #ccd9ce; border-radius: .55rem; background: #fff; color: inherit; text-decoration: none; }
+.or-tabs a[aria-current] { background: #193e34; color: #fff; border-color: #193e34; }
+.or-filters { padding: .85rem; background: #fff; border: 1px solid #d9e4d9; border-radius: .75rem; }
+.or-filters label { display: grid; gap: .25rem; font-size: .88rem; font-weight: 650; max-width: 100%; }
+.or-filters input, .or-filters select, .or-filters button { max-width: 100%; min-height: 2.6rem; border: 1px solid #a9b9ad; border-radius: .45rem; padding: .4rem .55rem; font: inherit; color: inherit; background: #fff; }
+.or-filters select { width: min(14rem, 100%); }
+.or-filters button { background: #193e34; border-color: #193e34; color: #fff; cursor: pointer; }
+.or :focus-visible { outline: 3px solid #936317; outline-offset: 2px; }
+.or-cards, .or-grid, .or-rooms { display: grid; gap: .75rem; margin: 0; }
+.or-cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); }
+.or-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); }
+.or-panel, .or-cards > div, .or-rooms > li { background: #fff; border: 1px solid #d9e4d9; border-radius: .8rem; padding: 1rem; overflow-wrap: anywhere; }
+.or-cards dt { color: #436258; font-weight: 650; }
+.or-cards dd { margin: .3rem 0; font-size: clamp(1.2rem, 3vw, 1.65rem); font-weight: 750; font-variant-numeric: tabular-nums; }
+.or-note, .or-cards small { color: #4e645b; }
+.or-rooms { padding: .6rem 0 0; grid-template-columns: repeat(auto-fit,minmax(min(100%,8rem),1fr)); list-style: none; }
+.or-rooms > li { display: grid; align-content: start; justify-items: start; gap: .35rem; background: #fafbf8; }
+.or-section-title { display: flex; flex-wrap: wrap; gap: .7rem; align-items: start; justify-content: space-between; }
+.or-status { padding: .15rem .5rem; border-radius: 1rem; font-size: .85rem; background: #e7efe9; }
+.or-dirty, .or-heat-conflict { background: #f7e8bf; }
+.or-maintenance, .or-alert { background: #fae9e4; color: #78341c; }
+.or-alert { padding: .75rem; border-radius: .5rem; }
+.or-alert-text { color: #78341c; font-weight: 650; }
+.or-panel p + a, .or-panel ul + a { display: inline-block; margin-top: .65rem; }
+.or-panel a { color: #164d3e; text-decoration: underline; }
+.or-scroll { overflow: auto; max-width: 100%; }
+.or table { width: 100%; border-collapse: collapse; margin: .45rem 0; font-variant-numeric: tabular-nums; }
+.or caption { text-align: left; padding: .35rem; color: #49665b; }
+.or td, .or th { text-align: left; padding: .5rem; border-bottom: 1px solid #e3ebe4; }
+.or th { background: #edf3ec; }
+.or-heatmap td { text-align: center; }
+.or-heatmap td a { display: inline-block; padding: .3rem; }
+.or-heatmap th:first-child { position: sticky; left: 0; min-width: 5.2rem; }
+.or-heat-sold { background: #e0eee3; }
+.or-bars { display: grid; gap: .5rem; padding: 0; margin: .65rem 0; list-style: none; }
+.or-bars li > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem .6rem; }
+.or-bars strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.or-bars meter { display: block; width: 100%; height: .7rem; accent-color: #297359; }
+.or-bars meter::-webkit-meter-optimum-value { background: #297359; }
+.or-bars meter.or-negative::-webkit-meter-optimum-value { background: #a44e2e; }
+.or-series { max-height: 25rem; overflow: auto; }
+.or-pages { margin-top: .8rem; align-items: center; }

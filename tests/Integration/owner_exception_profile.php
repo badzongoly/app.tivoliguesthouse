@@ -1,0 +1,4 @@
+<?php
+if(PHP_SAPI!=='cli')exit(1);putenv('TIVOLI_TEST_MODE=1');putenv('TIVOLI_OWNER_PROFILE=1');require dirname(__DIR__,2).'/bootstrap/stays.php';$a=access_service();$r=$a->repo;
+if((int)$r->run('SELECT @@port')->fetchColumn()!==3307||$r->run('SELECT DATABASE()')->fetchColumn()!=='tivoli_auth_test'||$r->run('SELECT marker FROM security_test_marker')->fetchColumn()!=='synthetic-auth-only-v1')exit(2);
+$owner=(int)$r->run("SELECT id FROM users WHERE email='admin@example.invalid'")->fetchColumn();putenv('TIVOLI_FINANCE_OWNER_USER_ID='.$owner);$s=new \Tivoli\Service\OwnerExceptionService($a,'2060-11-22 14:00:00');$start=microtime(true);$data=$s->read($owner);$summary=['seconds'=>round(microtime(true)-$start,2),'open'=>$data['open'],'coverage'=>$data['coverage'],'timings'=>$data['test_timings_ms']];file_put_contents(dirname(__DIR__,2).'/.local-setup/owner-exceptions-profile.json',json_encode($summary,JSON_THROW_ON_ERROR));echo json_encode($summary,JSON_THROW_ON_ERROR);

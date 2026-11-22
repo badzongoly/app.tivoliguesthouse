@@ -1,6 +1,10 @@
 Require local
-<FilesMatch "(?i)(\.(sql|log|md|bak)$|^error_log$|^db.*\.php$)">
-Require all denied
-</FilesMatch>
+Options -Indexes
 RewriteEngine On
-RewriteRule ^(?:\.git|\.local-setup|docs|\.github)(?:/|$) - [F,L]
+RewriteRule ^$ public/index.php [END]
+RewriteRule ^((?:index|admin_recovery|bookings|checkin|checkout|dashboard|expenses|finance|purchases|handover|stock-counts|stock-issues|housekeeping|weekly-audits|owner-exceptions|reminders|notification-status|payroll|financial-corrections|finance-evidence|extra_sales|extras|payments|reports|owner_reports|rooms|stock|users|audit|staff|hr-settings|cleaning-settings|hr-document|occupancy|guest-id|fault-attachment)\.php)$ public/$1 [END]
+RewriteRule ^(auth/(?:login|logout|change-password|forgot-password|reset-password)\.php)$ public/$1 [END]
+RewriteRule ^(assets/.*)$ public/$1 [END]
+RewriteRule ^img/Tivoli\.png$ public/assets/images/Tivoli.png [END]
+RewriteRule ^public(?:/|$) - [L]
+RewriteRule ^ - [F,END]

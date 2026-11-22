@@ -1,0 +1,43 @@
+<?php
+if(PHP_SAPI!=='cli')exit(1);putenv('TIVOLI_TEST_MODE=1');require dirname(__DIR__,2).'/bootstrap/stays.php';
+use Tivoli\Service\ReceiptCorrectionService;
+$a=access_service();$r=$a->repo;
+if((int)$r->run('SELECT @@port')->fetchColumn()!==3307||$r->run('SELECT DATABASE()')->fetchColumn()!=='tivoli_auth_test'||$r->run('SELECT marker FROM security_test_marker')->fetchColumn()!=='synthetic-auth-only-v1')exit(2);
+if(!class_exists(ReceiptCorrectionService::class))throw new RuntimeException('Approved receipt correction workflow missing');
+
+$n=0;$clock='2036-04-15 14:00:00';$tag=bin2hex(random_bytes(5));$owner=(int)$r->run("SELECT id FROM users WHERE email='admin@example.invalid'")->fetchColumn();putenv('TIVOLI_FINANCE_OWNER_USER_ID='.$owner);
+$s=new ReceiptCorrectionService($a,$clock);$f=new \Tivoli\Service\FinanceService($a,$clock);$stay=new \Tivoli\Service\StayService($a,$clock);
+function ck():string{return bin2hex(random_bytes(16));}
+function ca(bool $v,string $label):void{global $n;if(!$v)throw new RuntimeException($label);$n++;echo "PASS $label\n";}
+function cn(callable $f,string $label):void{try{$f();}catch(Throwable $e){ca(true,$label);return;}throw new RuntimeException('Expected denial '.$label);}
+function cu(string $role='clerk'):int{global $r;$r->run('INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,?)',['Synthetic correction user',ck().'@example.invalid',password_hash('Synthetic Correction Passphrase 123!',PASSWORD_BCRYPT),$role]);$id=(int)$r->db->lastInsertId();$r->run('INSERT INTO security_accounts(user_id,must_change_password) VALUES(?,0)',[$id]);$r->run('INSERT INTO security_user_roles SELECT ?,id FROM security_roles WHERE name=?',[$id,$role]);return $id;}
+$staff=cu();$other=cu();$admin=cu('admin');
+function cp(string $method='momo',string $amount='500.00',bool $frozen=true,string $checkin='2036-03-25 14:00:00'):array{global $r,$staff,$owner;$r->run("INSERT INTO rooms(name,type,rate,status) VALUES(?,'Standard',500,?)",['Synthetic corrections '.ck(),$frozen?'dirty':'occupied']);$room=(int)$r->db->lastInsertId();$r->run('INSERT INTO bookings(room_id,rate_per_night,guest_name,checkin_at,checkout_at,status) VALUES(?,500,?,?,?,?)',[$room,'Synthetic correction guest',$checkin,null,'active']);$booking=(int)$r->db->lastInsertId();$r->run('INSERT INTO payments(booking_id,method,amount,note,created_at) VALUES(?,?,?,?,?)',[$booking,$method,$amount,'Synthetic original receipt','2036-03-25 14:01:00']);$payment=(int)$r->db->lastInsertId();$ref=$method==='momo'?'COR-'.ck():'';$r->run('INSERT INTO stay_receipts VALUES(?,?,?,?)',[$payment,$staff,$ref,'2036-03-25 14:01:00']);if($frozen)$r->run("UPDATE bookings SET status='checked_out',checkout_at='2036-03-26 10:00:00' WHERE id=?",[$booking]);if($frozen)$r->run("INSERT INTO stay_departures(booking_id,room_minor,extras_minor,incidental_minor,paid_minor,balance_minor,actor_id,departed_at,note,refund_cursor) VALUES(?,50000,0,0,?,?,?,'2036-03-26 10:00:00','Synthetic frozen checkout',0)",[$booking,\Tivoli\Domain\Stay\StayRules::minor($amount),50000-\Tivoli\Domain\Stay\StayRules::minor($amount),$owner]);return compact('room','booking','payment','ref');}
+function cv(int $id,int $who=0):array{global $s,$owner;return ['id'=>(string)$id,'version'=>$s->detail($who?:$owner,$id)['version']];}
+function cr(int $payment,array $extra=[],int $who=0):array{global $s,$staff;return $s->execute($who?:$staff,'request',$extra+['payment_id'=>(string)$payment,'source_token'=>$s->source($who?:$staff,$payment)['token'],'type'=>'amount','amount'=>'300.00','reason'=>'Synthetic independent collection evidence','confirmed'=>'1'],ck());}
+function cc(int $id,array $extra=[],?string $key=null):array{global $s,$owner;return $s->execute($owner,'post',$extra+cv($id)+['verified'=>'1','reason'=>'Owner checked actual collection and effects'],$key??ck());}
+function cb(int $booking):array{global $r,$stay;return $stay->bill($r->run('SELECT * FROM bookings WHERE id=?',[$booking])->fetch());}
+
+$kind=$argv[1]??'all';
+if(in_array($kind,['all','chain'],true)){
+ $x=cp('momo','100.00',false,'2036-04-15 12:00:00');$r->run("INSERT INTO payments(booking_id,method,amount,note,created_at) VALUES(?,'momo',90,'Synthetic retained collection','2036-03-25 14:02:00')",[$x['booking']]);$keeper=(int)$r->db->lastInsertId();$r->run('INSERT INTO stay_receipts VALUES(?,?,?,?)',[$keeper,$staff,$x['ref'],'2036-03-25 14:02:00']);
+ $out=cr($x['payment'],['amount'=>'90.00']);cc($out['id']);$alias=$r->run("SELECT * FROM finance_claims WHERE scope='receipt_alias' AND identity_hash=?",[hash('sha256',mb_strtolower($x['ref'],'UTF-8'))])->fetch();
+ $out=cr($x['payment'],['type'=>'duplicate','keeper_id'=>(string)$keeper]);cc($out['id']);ca(\Tivoli\Repository\ReceiptAccounting::position($r,$x['payment'])['position']['amount']===0,'Corrected receipt may subsequently be deduplicated without changing its original alias claim');
+ $out=cr($keeper,['amount'=>'80.00']);cc($out['id']);$r->run("INSERT INTO payments(booking_id,method,amount,note,created_at) VALUES(?,'momo',80,'Synthetic second retained identity','2036-03-25 14:03:00')",[$x['booking']]);$third=(int)$r->db->lastInsertId();$r->run('INSERT INTO stay_receipts VALUES(?,?,?,?)',[$third,$staff,$x['ref'],'2036-03-25 14:03:00']);
+ $out=cr($keeper,['type'=>'duplicate','keeper_id'=>(string)$third]);cc($out['id']);ca(\Tivoli\Repository\ReceiptAccounting::position($r,$keeper)['position']['amount']===0,'Duplicate keeper chain resolves to current real collection');
+ ca($r->run("SELECT * FROM finance_claims WHERE scope='receipt_alias' AND identity_hash=?",[hash('sha256',mb_strtolower($x['ref'],'UTF-8'))])->fetch()===$alias,'Canonical identity resolution preserves original alias row exactly');
+ cn(fn()=>$f->execute($owner,'receipt_match',['id'=>(string)$third,'type'=>'payment','amount'=>'80.00','reference'=>'UNRELATED-'.ck(),'verified'=>'1','evidence'=>'Synthetic wrong canonical reference'],ck()),'Inherited collection alias requires the verified effective reference');
+ $f->execute($owner,'receipt_match',['id'=>(string)$third,'type'=>'payment','amount'=>'80.00','reference'=>$x['ref'],'verified'=>'1','evidence'=>'Synthetic canonical identity matched'],ck());ca(true,'Retained collection can match its immutable inherited alias');
+}
+if(in_array($kind,['all','matching'],true)){
+ $report=new \Tivoli\Repository\OwnerReports($r);$filters=\Tivoli\Repository\OwnerReports::filters(['view'=>'daily','end'=>'2036-03-25'],new DateTimeImmutable('2036-04-16 14:00:00',new DateTimeZone('UTC')));
+ $historic=\Tivoli\Repository\OwnerReports::filters(['view'=>'daily','end'=>'2036-03-25'],new DateTimeImmutable('2036-04-15 13:00:00',new DateTimeZone('UTC')));
+ $x=cp('cash','100.00');$base=$report->read($filters);$past=$report->read($historic);$out=cr($x['payment'],['type'=>'method','method'=>'momo','reference'=>'REVIEW-MATCH-'.ck()]);cc($out['id']);$after=$report->read($filters);
+ ca((int)$after['pending']===(int)$base['pending']+1,'Owner matching alert includes Cash to MoMo effective receipt');
+ ca((int)$report->read($historic)['pending']===(int)$past['pending'],'Matching projection honors historical as-of cutoff');
+ $x=cp('momo','100.00');$before=$report->read($filters);$out=cr($x['payment'],['type'=>'method','method'=>'cash','reference'=>'']);cc($out['id']);$after=$report->read($filters);ca((int)$after['pending']===(int)$before['pending']-1,'MoMo to Cash removes obsolete wallet matching alert');
+ $x=cp('momo','100.00',false,'2036-04-15 12:00:00');$r->run("INSERT INTO payments(booking_id,method,amount,note,created_at) VALUES(?,'momo',100,'Synthetic duplicate for review count','2036-03-25 14:02:00')",[$x['booking']]);$keeper=(int)$r->db->lastInsertId();$r->run('INSERT INTO stay_receipts VALUES(?,?,?,?)',[$keeper,$staff,$x['ref'],'2036-03-25 14:02:00']);$before=$report->read($filters);$out=cr($x['payment'],['type'=>'duplicate','keeper_id'=>(string)$keeper]);cc($out['id']);$after=$report->read($filters);ca((int)$after['pending']===(int)$before['pending']-1,'Compensated duplicate no longer creates a matching alert');
+ $cashFilters=\Tivoli\Repository\OwnerReports::filters(['view'=>'cash','start'=>'2036-03-25','end'=>'2036-03-25'],new DateTimeImmutable('2036-04-16 14:00:00',new DateTimeZone('UTC')));
+ $coverage=$report->read($cashFilters);ca(array_sum(array_map(fn($v)=>(int)$v['count'],$coverage['momo']))===(int)$after['pending']+array_sum(array_map(fn($v)=>$v['coverage']==='Matched by staff'||$v['coverage']==='Historical coverage unknown'?(int)$v['count']:0,$coverage['momo'])),'Owner coverage counts effective receipts, not compensating report legs');
+}
+echo "TOTAL $n receipt correction review assertions passed.\n";

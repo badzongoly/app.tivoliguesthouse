@@ -1,0 +1,3 @@
+<?php
+if(PHP_SAPI!=='cli'){exit(1);}putenv('TIVOLI_TEST_MODE=1');require dirname(__DIR__,2).'/bootstrap/security.php';$r=access_service()->repo;if($r->run('SELECT marker FROM security_test_marker')->fetchColumn()!=='synthetic-auth-only-v1'){exit(2);}
+if(($argv[1] ?? '')==='enable'){$r->db->exec("CREATE TRIGGER security_test_audit_failure BEFORE INSERT ON security_audit FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Synthetic audit failure'");}elseif(($argv[1] ?? '')==='disable'){$r->db->exec('DROP TRIGGER IF EXISTS security_test_audit_failure');}else{exit(3);}

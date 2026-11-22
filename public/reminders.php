@@ -1,0 +1,24 @@
+<?php
+require_once dirname(__DIR__).'/src/Security/require_login.php';
+use Tivoli\Service\ReminderService;
+$s=new ReminderService(access_service(),null,access_config());$actor=(int)$user['id'];$owner=$s->owner($actor);$error='';$data=['rows'=>[],'unavailable'=>false,'heartbeat'=>null];$preferences=[];$rules=[];$contacts=[];$auditors=[];$deliveries=[];$services=[];$reminderSelected=null;$activity=[];$key=bin2hex(random_bytes(16));
+$page='inbox';$tab='mine';$history=false;
+try{
+    foreach($_GET as $value)if(!is_string($value))throw new RuntimeException('Invalid reminder view.');$page=$_GET['page']??'inbox';$tab=$_GET['tab']??'mine';$history=($_GET['history']??'')==='1';
+    if(!in_array($page,['inbox','settings'],true)||!in_array($tab,['mine','rules','contacts','services','delivery'],true))throw new RuntimeException('Choose a valid reminder view.');$s->permit($actor);if($page==='settings'&&in_array($tab,['rules','contacts','services'],true)&&!$owner)throw new \Tivoli\Security\PermissionDenied('Only the designated owner manages shared reminder settings.');
+    if($_SERVER['REQUEST_METHOD']==='POST'){
+        access_check_csrf();foreach($_POST as $v)if(!is_string($v))throw new RuntimeException('Invalid reminder form.');$posted=$_POST;$action=$posted['action']??'';$key=preg_match('/^[a-f0-9]{32}$/D',$posted['operation_key']??'')?$posted['operation_key']:$key;$result=$s->execute($actor,$action,$posted,$posted['operation_key']??'');
+        $_SESSION['reminder_notice']=match($action){'generate'=>'Reminder check completed.','read'=>'Marked as read. The task remains on its existing workflow.','preferences'=>'Your delivery preferences were saved.','verify_contact'=>'Independent contact verification recorded.','rules'=>'Reminder rules saved. Original task deadlines are unchanged.',default=>'Action recorded.'};
+        $q=$action==='preferences'?['page'=>'settings']:($action==='rules'?['page'=>'settings','tab'=>'rules']:($action==='verify_contact'?['page'=>'settings','tab'=>'contacts']:[]));header('Location: '.access_url('reminders.php'.($q?'?'.http_build_query($q):'')).'#reminder-action');exit;
+    }
+    if(!in_array($_SERVER['REQUEST_METHOD'],['GET','HEAD'],true)){header('Allow: GET, HEAD, POST');http_response_code(405);throw new RuntimeException('Unsupported reminder request.');}
+    if($page==='settings'){$preferences=$s->prefs($actor);$services=$s->services();if($tab==='rules'){$rules=$s->rules();$auditors=array_filter((new \Tivoli\Service\WeeklyAuditService(access_service()))->dutyRoster($actor),fn($u)=>$u['audit_duty']);}if($tab==='contacts')$contacts=$s->contacts($actor);if($tab==='delivery')$deliveries=$s->deliveries($actor);}
+    else{$data=$s->inbox($actor,$history);if(isset($_GET['id'])){$id=filter_var($_GET['id'],FILTER_VALIDATE_INT);if(!$id)throw new RuntimeException('Choose your reminder.');foreach($data['rows'] as $row)if($row['id']===$id)$reminderSelected=$row;if(!$reminderSelected)throw new \Tivoli\Security\PermissionDenied('This reminder is unavailable or outside your current source authority.');if(!$reminderSelected['row']['unavailable'])$activity=$s->noticeActivity($actor,$id);}}
+    access_service()->audit($actor,'reminders.viewed','notification',null,'succeeded',['page'=>$page,'tab'=>$page==='settings'?$tab:null]);
+}catch(Throwable $e){$error=access_error($e);http_response_code($e instanceof \Tivoli\Security\PermissionDenied||http_response_code()===403?403:($e instanceof PDOException?503:(http_response_code()===405?405:400)));}
+$notice=is_string($_SESSION['reminder_notice']??null)?$_SESSION['reminder_notice']:'';unset($_SESSION['reminder_notice']);
+function rm_url(array $q=[]):string{return access_url('reminders.php'.($q?'?'.http_build_query($q):''));}
+function rm_fields(string $action,array $extra=[]):void{global $key;foreach(['csrf'=>access_csrf(),'operation_key'=>$key,'action'=>$action]+$extra as $n=>$v)echo '<input type="hidden" name="'.access_h($n).'" value="'.access_h((string)$v).'">';}
+function rm_button(string $label,array $q=[],bool $primary=false):void{echo '<a class="rm-button'.($primary?' rm-primary':'').'" href="'.access_h(rm_url($q)).'#reminder-action">'.access_h($label).'</a>';}
+function rm_state(string $state):string{return ['setup'=>'Waiting For Service Setup','verification'=>'Contact Verification Required','queued'=>'Queued','accepted'=>'Provider Accepted · Delivery Unconfirmed','delivered'=>'Delivered · Provider Receipt Received','failed'=>'Failed · Retry Pending / Review Required','unknown'=>'Outcome Unknown · Review Required','sending'=>'Send Intent Recorded · Outcome Pending','cancelled'=>'Cancelled Before Sending','source_unavailable'=>'Source Unavailable · Delivery Held'][$state]??'Review Required';}
+$layoutTitle='Reminders & Delivery';require dirname(__DIR__).'/templates/reminders/index.php';
