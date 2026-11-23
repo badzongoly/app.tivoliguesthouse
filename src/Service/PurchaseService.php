@@ -122,7 +122,7 @@ final class PurchaseService
         if(!$file&&$missing==='')throw new RuntimeException('Upload evidence or describe the alternative evidence when no supplier receipt is available.');
         if($case&&$at<$case['commitment']['committed_at'])throw new RuntimeException('Delivery cannot precede the recorded actual commitment.');
         $status=$in['payment_status']??'unpaid';if(!in_array($status,['unpaid','paid'],true))throw new RuntimeException('Choose whether this cost was already paid.');
-        $data=['cost'=>$cost,'delivered_at'=>$at,'description'=>R::text($in['description']??'',2000,true),'missing_evidence'=>$missing,'proof'=>$file?FinanceAttachment::meta($file):null,'payment'=>null,'exception'=>!$case||$cost>$case['limit']];
+        $data=['cost'=>$cost,'delivered_at'=>$at,'description'=>R::text($in['description']??'',2000,$case===null),'missing_evidence'=>$missing,'proof'=>$file?FinanceAttachment::meta($file):null,'payment'=>null,'exception'=>!$case||$cost>$case['limit']];
         if($status==='paid'){
             $data['payment']=$this->paymentData($in,$cost);
             if($case&&$data['payment']['paid_at']<$case['approval']['created_at'])$data['exception']=true;
@@ -146,7 +146,7 @@ final class PurchaseService
         elseif(!$requester)throw new PermissionDenied('Only the requester may record this operational action.');
         if($action==='approve'){
             if(!in_array($c['status'],['pending','change'],true))throw new RuntimeException('This request is not awaiting approval.');
-            $reason=R::text($in['reason']??'',2000,true);$decision=$in['decision']??'';
+            $reason=R::text($in['reason']??'',2000);$decision=$in['decision']??'';
             if($decision==='reject')return $this->event($c['change']?'purchase_change_rejected':'purchase_rejected',$actor,compact('reason'),$id);
             if($decision!=='approve')throw new RuntimeException('Choose Approve or Reject.');$limit=$this->amount($in['limit']??'');$scope=$c['change']['scope']??$c['scope'];
             return $this->event('purchase_approved',$actor,compact('limit','reason','scope'),$id);
