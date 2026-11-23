@@ -481,14 +481,27 @@ final class StayService
         return $rooms;
     }
 
+    public function extrasCatalogue(int $actor): array
+    {
+        $this->access->requirePrivilege($actor,'bookings.manage');
+        $this->installed();
+        return $this->extraRows();
+    }
+
+    private function extraRows(): array
+    {
+        $extras=$this->repo->run("SELECT e.*,COALESCE(m.category,'General') category,COALESCE(m.tracked,1) tracked,COALESCE(m.low_stock,0) low_stock,(m.extra_id IS NOT NULL) configured FROM extras e LEFT JOIN stay_extra_settings m ON m.extra_id=e.id ORDER BY e.active DESC,e.name,e.id")->fetchAll();
+        $heldByItem=[];
+        if((new FinanceService($this->access))->installed())foreach($this->repo->run("SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.extra_id')) FROM finance_events WHERE target_type='stock_issue' AND kind='si_reported'")->fetchAll(\PDO::FETCH_COLUMN) as $extra)$heldByItem[$extra]=\Tivoli\Repository\StockAvailability::hold($this->repo,(int)$extra)['held'];
+        foreach($extras as &$extra){$extra['held_qty']=R::decimal($heldByItem[$extra['id']]??0);$extra['available_qty']=R::decimal(R::quantity((string)$extra['stock_qty'])-($heldByItem[$extra['id']]??0));}unset($extra);
+        return $extras;
+    }
+
     public function snapshot(int $actor,int $bookingId=0): array
     {
         $this->access->requirePrivilege($actor,'bookings.manage');
         $rooms=$this->roomBoard($actor);
-        $data=['rooms'=>$rooms,'recent'=>$this->repo->run("SELECT b.*,r.name room_name,COALESCE(d.stay_type,'overnight') stay_type FROM bookings b JOIN rooms r ON r.id=b.room_id LEFT JOIN stay_details d ON d.booking_id=b.id WHERE b.status='checked_out' ORDER BY b.checkout_at DESC,b.id DESC LIMIT 100")->fetchAll(),'extras'=>$this->repo->run("SELECT e.*,COALESCE(m.category,'General') category,COALESCE(m.tracked,1) tracked,COALESCE(m.low_stock,0) low_stock,(m.extra_id IS NOT NULL) configured FROM extras e LEFT JOIN stay_extra_settings m ON m.extra_id=e.id ORDER BY e.active DESC,e.name")->fetchAll(),'faults'=>$this->repo->run('SELECT f.*,r.name room_name,EXISTS(SELECT 1 FROM security_audit a WHERE a.target_type=\'room_fault\' AND a.target_id=CAST(f.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AND a.action=\'stay.fault_attachment_saved\' AND a.outcome=\'succeeded\') attachment_available,EXISTS(SELECT 1 FROM security_audit a WHERE a.target_type=\'room_fault\' AND a.target_id=CAST(f.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AND a.action=\'stay.repair_attachment_saved\' AND a.outcome=\'succeeded\') repair_attachment_available FROM stay_faults f JOIN rooms r ON r.id=f.room_id ORDER BY f.id DESC LIMIT 100')->fetchAll(),'audits'=>$this->repo->run('SELECT a.*,r.name room_name FROM stay_room_audits a JOIN rooms r ON r.id=a.room_id ORDER BY a.id DESC LIMIT 100')->fetchAll(),'movements'=>$this->repo->run('SELECT m.*,e.name extra_name FROM stock_movements m JOIN extras e ON e.id=m.extra_id ORDER BY m.id DESC LIMIT 100')->fetchAll(),'refunds'=>[],'booking'=>null,'bill'=>null,'payments'=>[],'lines'=>[],'incidentals'=>[],'activity'=>[]];
-        $heldByItem=[];
-        if((new FinanceService($this->access))->installed())foreach($this->repo->run("SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.extra_id')) FROM finance_events WHERE target_type='stock_issue' AND kind='si_reported'")->fetchAll(\PDO::FETCH_COLUMN) as $extra)$heldByItem[$extra]=\Tivoli\Repository\StockAvailability::hold($this->repo,(int)$extra)['held'];
-        foreach($data['extras'] as &$extra){$extra['held_qty']=R::decimal($heldByItem[$extra['id']]??0);$extra['available_qty']=R::decimal(R::quantity((string)$extra['stock_qty'])-($heldByItem[$extra['id']]??0));}unset($extra);
+        $data=['rooms'=>$rooms,'recent'=>$this->repo->run("SELECT b.*,r.name room_name,COALESCE(d.stay_type,'overnight') stay_type FROM bookings b JOIN rooms r ON r.id=b.room_id LEFT JOIN stay_details d ON d.booking_id=b.id WHERE b.status='checked_out' ORDER BY b.checkout_at DESC,b.id DESC LIMIT 100")->fetchAll(),'extras'=>$this->extraRows(),'faults'=>$this->repo->run('SELECT f.*,r.name room_name,EXISTS(SELECT 1 FROM security_audit a WHERE a.target_type=\'room_fault\' AND a.target_id=CAST(f.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AND a.action=\'stay.fault_attachment_saved\' AND a.outcome=\'succeeded\') attachment_available,EXISTS(SELECT 1 FROM security_audit a WHERE a.target_type=\'room_fault\' AND a.target_id=CAST(f.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AND a.action=\'stay.repair_attachment_saved\' AND a.outcome=\'succeeded\') repair_attachment_available FROM stay_faults f JOIN rooms r ON r.id=f.room_id ORDER BY f.id DESC LIMIT 100')->fetchAll(),'audits'=>$this->repo->run('SELECT a.*,r.name room_name FROM stay_room_audits a JOIN rooms r ON r.id=a.room_id ORDER BY a.id DESC LIMIT 100')->fetchAll(),'movements'=>$this->repo->run('SELECT m.*,e.name extra_name FROM stock_movements m JOIN extras e ON e.id=m.extra_id ORDER BY m.id DESC LIMIT 100')->fetchAll(),'refunds'=>[],'booking'=>null,'bill'=>null,'payments'=>[],'lines'=>[],'incidentals'=>[],'activity'=>[]];
         if ($bookingId>0) {
             $b=$this->repo->run("SELECT b.*,r.name room_name,r.type,d.stay_type,d.gender detail_gender,d.id_type,d.identity_verified,d.payment_attested,d.room_checked,d.due_at,EXISTS(SELECT 1 FROM stay_identity i WHERE i.booking_id=b.id) identity_available FROM bookings b JOIN rooms r ON r.id=b.room_id LEFT JOIN stay_details d ON d.booking_id=b.id WHERE b.id=?",[$bookingId])->fetch();
             if (!$b) { throw new RuntimeException('Guest account not found.'); }$b['stay_type']=$b['stay_type'] ?? 'overnight';$b['gender']=$b['detail_gender'] ?? $b['gender'];$data['booking']=$this->displayDeparture($b);$data['bill']=$this->bill($b);$data['departure_case']=$this->departureRecord($bookingId);

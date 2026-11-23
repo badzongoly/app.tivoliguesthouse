@@ -1,7 +1,7 @@
 <?php $layoutTitle='Shift Handover';require dirname(__DIR__).'/layouts/start.php';?>
 <link rel="stylesheet" href="<?=access_h(access_url('assets/css/handover.css'))?>"><script src="<?=access_h(workspace_asset_url('assets/js/handover.js'))?>" defer></script>
 <div class="handover"><header><p class="eyebrow">STAFF ACCOUNTABILITY</p><h1>Shift Handover</h1><p>Open work, individual responsibility and recorded acknowledgements. All times are UTC.</p></header>
-<nav class="ho-tabs" aria-label="Handover Sections"><?php foreach($pages as $p=>$label):if($p==='owner'&&!$owner)continue;?><a href="<?=access_h(ho_url(['page'=>$p]))?>#handover-content" <?=$page===$p?'aria-current="page"':''?>><?=access_h($label)?></a><?php endforeach?></nav>
+<nav class="ho-tabs workspace-tab-strip" aria-label="Handover Sections"><?php foreach($pages as $p=>$label):if($p==='owner'&&!$owner)continue;?><a href="<?=access_h(ho_url(['page'=>$p]))?>#handover-content" <?=$page===$p?'aria-current="page"':''?>><?=access_h($label)?></a><?php endforeach?></nav>
 <?php if($notice):?><p class="notice" id="handover-status" role="status" tabindex="-1"><?=access_h($notice)?></p><?php endif?>
 <?php if($error):?><section class="card error" id="handover-error" role="alert" tabindex="-1"><h2>Action Needs Attention</h2><p><?=access_h($error)?></p><a href="<?=access_h(ho_url(['page'=>$page]+($id?['id'=>$id]:[])))?>#handover-content">Reload Current Record</a></section><?php endif?>
 <div id="handover-content" tabindex="-1">

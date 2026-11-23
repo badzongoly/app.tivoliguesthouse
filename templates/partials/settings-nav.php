@@ -16,4 +16,4 @@ $settingsCurrent=match($settingsFile){'hr-settings.php'=>($section==='documents'
 ?>
 <link rel="stylesheet" href="<?=access_h(workspace_asset_url('assets/css/settings-workspace.css'))?>">
 <script src="<?=access_h(workspace_asset_url('assets/js/settings-workspace.js'))?>" defer></script>
-<nav class="app-section-nav settings-navigation" aria-label="Settings"><?php foreach($settingsTabs as $settingsKey=>[$settingsPath,$settingsLabel]):?><a href="<?=access_h(access_url($settingsPath))?>" <?=$settingsKey===$settingsCurrent?'aria-current="page"':''?>><?=access_h($settingsLabel)?></a><?php endforeach?></nav>
+<nav class="app-section-nav settings-navigation workspace-tab-strip" aria-label="Settings"><?php foreach($settingsTabs as $settingsKey=>[$settingsPath,$settingsLabel]):?><a href="<?=access_h(access_url($settingsPath))?>" <?=$settingsKey===$settingsCurrent?'aria-current="page"':''?>><?=access_h($settingsLabel)?></a><?php endforeach?></nav>

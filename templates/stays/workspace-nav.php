@@ -5,7 +5,7 @@ $stayNavGuestContext=!empty($guest)||($stayNavInPreparation&&!empty($fromStay));
 $stayNavBoardCurrent=($stayNavInPreparation&&!$stayNavGuestContext)||(($section??'')==='board'&&!$stayNavGuestContext);
 ?>
 <link rel="stylesheet" href="<?=access_h(workspace_asset_url('assets/css/occupancy-navigation.css'))?>">
-<nav class="app-section-nav" aria-label="Stays">
+<nav class="app-section-nav workspace-tab-strip" aria-label="Stays">
 <a href="<?=access_h(stay_url($stayNavCanViewStays?[]:['section'=>'housekeeping']))?>#stay-workspace" <?=$stayNavBoardCurrent||!$stayNavCanViewStays?'aria-current="page"':''?>>Room Board</a>
 <?php if($stayNavCanViewStays):?>
 <a href="<?=access_h(stay_url(['section'=>'folios']))?>#stay-workspace" <?=$stayNavGuestContext||($section??'')==='folios'?'aria-current="page"':''?>>Guest Stay Account</a>

@@ -25,7 +25,7 @@ const root=path.resolve(__dirname,'../..'),evidence=fs.mkdtempSync(path.join(os.
  await nav(path);
  await check('document.querySelectorAll("nav[aria-label=Stays]").length===1',name+' one main stays navigation '+width);
  await check('JSON.stringify([...document.querySelectorAll("nav[aria-label=Stays] [aria-current=page]")].map(a=>a.textContent))==='+JSON.stringify(JSON.stringify([parent])),name+' correct single parent tab');
- await check('(()=>{const a=document.querySelector("nav[aria-label=Stays] [aria-current=page]"),s=getComputedStyle(a);return s.backgroundColor==="rgb(25, 61, 52)"&&s.color==="rgb(255, 255, 255)"})()',name+' selected parent is visibly highlighted');
+ await check('(()=>{const a=document.querySelector("nav[aria-label=Stays] [aria-current=page]"),s=getComputedStyle(a);return s.backgroundColor==="rgb(249, 251, 245)"&&s.color==="rgb(25, 62, 52)"})()',name+' selected parent is visibly highlighted');
  await check('document.documentElement.scrollWidth<=innerWidth',name+' page fits '+width);
  await check('[...document.querySelectorAll("[name=operation_key]")].every(x=>/^[a-f0-9]{32}$/.test(x.value))',name+' form operation keys remain intact');
  const specific={

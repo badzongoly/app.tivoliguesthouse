@@ -1,0 +1,60 @@
+.extras-catalogue-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+    gap: .75rem;
+    align-items: end;
+    margin-block: 1rem;
+}
+.extras-catalogue-filters input, .extras-catalogue-filters select {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+}
+#extras-catalogue .extras-catalogue-filters label { margin: 0; }
+#extras-catalogue .extras-catalogue-filters :is(input, select) { margin: .25rem 0 0; }
+#extras-catalogue nav[aria-label="Catalogue Status"] { margin-block: .75rem; }
+#extras-catalogue nav[aria-label="Catalogue Status"] a[aria-current] {
+    background: var(--app-green, #193e34);
+    color: white;
+}
+.extras-catalogue-table { width: 100%; }
+.extras-catalogue-table th[scope="row"] {
+    background: transparent;
+    color: var(--app-ink, #16352c);
+    font-size: .95rem;
+    letter-spacing: normal;
+    text-transform: none;
+}
+.extras-catalogue-table :is(td, th) { vertical-align: top; overflow-wrap: anywhere; }
+.extras-catalogue-table summary { cursor: pointer; min-height: 44px; padding-block: .65rem; }
+.extras-catalogue-table details dl { margin: .25rem 0; }
+.extras-catalogue-table details dl div { display: flex; gap: .5rem; }
+.extras-catalogue-table details dd { margin: 0; font-variant-numeric: tabular-nums; }
+.extras-catalogue-table details .button { display: block; min-height: 44px; width: fit-content; margin-block: .35rem; }
+.catalogue-price, .catalogue-available { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 680px) {
+    .extras-catalogue-filters { grid-template-columns: repeat(2, minmax(0,1fr)); gap: .5rem; }
+    .extras-catalogue-filters label:first-of-type,
+    .extras-catalogue-filters > .stay-actions { grid-column: 1 / -1; }
+    #extras-catalogue nav[aria-label="Catalogue Status"] a { min-height: 44px; }
+    .extras-catalogue-table .catalogue-status { align-self: center; }
+    .extras-catalogue-table, .extras-catalogue-table tbody { display: block; }
+    .extras-catalogue-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .extras-catalogue-table tbody tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: .2rem .75rem;
+        padding: .75rem 0;
+        border-bottom: 1px solid #d6ded4;
+    }
+    .extras-catalogue-table tbody :is(td, th) { padding: 0; border: 0; }
+    .extras-catalogue-table .catalogue-category { grid-row: 2; color: #436258; }
+    .extras-catalogue-table .catalogue-price { grid-row: 1; grid-column: 2; font-weight: 650; }
+    .extras-catalogue-table .catalogue-available { grid-row: 2; grid-column: 2; text-align: end; }
+    .extras-catalogue-table .catalogue-available::before { content: 'Available '; }
+    .extras-catalogue-table .catalogue-status { grid-row: 3; grid-column: 1; }
+    .extras-catalogue-table .catalogue-details { grid-row: 3; grid-column: 2; }
+    .extras-catalogue-table .catalogue-details:not(:has(details[open])) summary { text-align: end; }
+    .extras-catalogue-table .catalogue-details:has(details[open]) { grid-row: 4; grid-column: 1 / -1; }
+}

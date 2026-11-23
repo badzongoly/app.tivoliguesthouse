@@ -3,7 +3,7 @@
 <div class="stock-counts">
 <header class="app-page-heading-row"><div><p class="app-eyebrow">EXTRAS & STOCK</p><h1>Stock Counts & Variance Review</h1><p>Physical counts, owner decisions and retained stock history.</p></div></header>
 <?php require dirname(__DIR__).'/partials/extras-nav.php'; ?>
-<nav class="app-section-nav" aria-label="Stock Count Actions">
+<nav class="app-section-nav workspace-tab-strip" aria-label="Stock Count Actions">
 <?php foreach(['register'=>'Count Register','new'=>'Start Count']+($owner?['owner'=>'Owner Review']:[])+['activity'=>'Activity'] as $nav=>$label):?><a href="<?=access_h(sc_url(['page'=>$nav]))?>#stockcount-action" <?=$page===$nav&&!$id?'aria-current="page"':''?>><?=access_h($label)?></a><?php endforeach?>
 </nav>
 <?php if($notice):?><p class="notice" id="stockcount-status" role="status" tabindex="-1"><?=access_h($notice)?></p><?php endif?>

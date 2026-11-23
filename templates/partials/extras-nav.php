@@ -5,9 +5,26 @@ $extrasNavTab=match($extrasNavPage){
  'extra_sales.php'=>'sales','stock.php'=>'stock','stock-counts.php'=>'counts','stock-issues.php'=>'issues',
  default=>(($_GET['tab']??'')==='stock'?'stock':'catalogue')
 };
+$extrasNavItems=[
+    'catalogue'=>['Manage Extras','extras.php',['extras.manage']],
+    'sales'=>['Extra Sales','extra_sales.php',['sales.view']],
+    'stock'=>['Stock Movements','stock.php',['stock.manage']],
+    'counts'=>['Stock Counts','stock-counts.php',['bookings.manage','stock.manage']],
+    'issues'=>['Non-Sale Issues','stock-issues.php',['bookings.manage','stock.manage']],
+];
+$extrasNavItems=array_filter($extrasNavItems,
+    static fn(array $item):bool=>(bool)array_intersect($item[2],$extrasNavPermissions));
+if((new \Tivoli\Service\InventoryCostingService(access_service()))->owner((int)$user['id'])){
+    $extrasNavItems['costing']=['Stock Costing','finance.php?page=profit#stock-costing'];
+}
 ?>
+<nav class="extras-navigation workspace-tab-strip" aria-label="Extras & Stock">
+        <?php foreach($extrasNavItems as $extrasNavKey=>$extrasNavItem):[$extrasNavLabel,$extrasNavPath]=$extrasNavItem;?>
+        <a href="<?=access_h(access_url($extrasNavPath))?>" <?=$extrasNavKey===$extrasNavTab?'aria-current="page"':''?>><?=access_h($extrasNavLabel)?></a>
+        <?php endforeach?>
+</nav>
 <?php if($extrasNavTab==='catalogue'||$extrasNavTab==='stock'||$extrasNavTab==='sales'):?>
-<div class="app-section-nav" aria-label="Common Extras & Stock Actions" role="group">
+<div class="extras-quick-actions" aria-label="Common Extras & Stock Actions" role="group">
 <?php if(in_array('bookings.manage',$extrasNavPermissions,true)):?>
 <a href="<?=access_h(access_url('occupancy.php'))?>#stay-workspace">Sell an Extra to a Guest</a>
 <?php endif?>
@@ -19,10 +36,3 @@ $extrasNavTab=match($extrasNavPage){
 <?php endif?>
 </div>
 <?php endif?>
-<nav class="app-section-nav extras-navigation" aria-label="Extras & Stock">
-<?php foreach(['catalogue'=>['Manage Extras','extras.php','extras.manage'],'sales'=>['Extra Sales','extra_sales.php','sales.view'],'stock'=>['Stock Movements','stock.php','stock.manage']] as $extrasNavKey=>[$extrasNavLabel,$extrasNavPath,$extrasNavPermission]):if(!in_array($extrasNavPermission,$extrasNavPermissions,true))continue;?>
-<a href="<?=access_h(access_url($extrasNavPath))?>" <?=$extrasNavKey===$extrasNavTab?'aria-current="page"':''?>><?=access_h($extrasNavLabel)?></a>
-<?php endforeach?>
-<?php if(array_intersect(['bookings.manage','stock.manage'],$extrasNavPermissions)):?><a href="<?=access_h(access_url('stock-counts.php'))?>" <?=$extrasNavTab==='counts'?'aria-current="page"':''?>>Stock Counts</a><a href="<?=access_h(access_url('stock-issues.php'))?>" <?=$extrasNavPage==='stock-issues.php'?'aria-current="page"':''?>>Non-Sale Issues</a><?php endif?>
-<?php if((new \Tivoli\Service\InventoryCostingService(access_service()))->owner((int)$user['id'])):?><a href="<?=access_h(access_url('finance.php?page=profit'))?>#stock-costing">Stock Costing</a><?php endif?>
-</nav>

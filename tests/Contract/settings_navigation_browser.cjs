@@ -24,7 +24,7 @@ const root=path.resolve(__dirname,'../..'),evidence=fs.mkdtempSync(path.join(os.
  await check('!document.querySelector("main [name=action][value=generate]")',name+' no duplicated Check Now');
  for(const width of [1440,390,320]){await page('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width<500});
  await check('document.documentElement.scrollWidth<=innerWidth&&!/Fatal error|Warning:|Parse error|SQLSTATE/.test(document.body.innerText)',name+' healthy page fits '+width);
- await check('getComputedStyle(document.querySelector(".settings-navigation [aria-current=page]")).backgroundColor==="rgb(25, 62, 52)"',name+' visibly selected '+width);
+ await check('getComputedStyle(document.querySelector(".settings-navigation [aria-current=page]")).backgroundColor==="rgb(249, 251, 245)"',name+' visibly selected '+width);
  await check('[...document.querySelectorAll("[name=operation_key]")].every(x=>/^[a-f0-9]{32}$/.test(x.value))',name+' operation keys intact '+width);views++;}
  if(['payments','documents','cleaning','inspection','areas','extras'].includes(name)){
  await ev('window.editor=document.querySelector("form[data-settings-editor]");window.editorBefore=JSON.stringify([...new FormData(editor)]);editor.closest("details").open=true;');await wait(100);

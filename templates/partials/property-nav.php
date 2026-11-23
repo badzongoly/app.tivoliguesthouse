@@ -15,6 +15,6 @@ $propertyNavItems+=['followups'=>['Follow-Ups',access_url('weekly-audits.php').'
 if($propertyNavOwner)$propertyNavItems+=['duty'=>['Audit Duty',access_url('weekly-audits.php?page=duty').'#audit-action']];
 ?>
 <link rel="stylesheet" href="<?=access_h(workspace_asset_url('assets/css/property-navigation.css'))?>">
-<nav class="app-section-nav stay-property-nav property-navigation" aria-label="Property &amp; Audits">
+<nav class="app-section-nav stay-property-nav property-navigation workspace-tab-strip" aria-label="Property &amp; Audits">
 <?php foreach($propertyNavItems as $propertyNavKey=>[$propertyNavLabel,$propertyNavHref]):?><a href="<?=access_h($propertyNavHref)?>" <?=$propertyNavActive===$propertyNavKey?'aria-current="page"':''?>><?=access_h($propertyNavLabel)?></a><?php endforeach?>
 </nav>

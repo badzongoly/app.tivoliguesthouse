@@ -48,13 +48,20 @@ if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&$form==='stock_in'){header('Loca
 if($section==='rooms'){if(in_array($form,['fault','repair'],true))$tab='faults';elseif($form==='room_audit')$tab='audits';elseif($form==='room_save')$tab='master';}
 $roomId=max(0,(int)($_GET['room_id'] ?? 0));$editId=max(0,(int)($_GET['id'] ?? 0));
 $auditAreas=['revision'=>'','entries'=>[]];$cleaningChecklist=['revision'=>'','sections'=>[]];$inspectionChecklist=$cleaningChecklist;$formValues=[];$extraCategories=[];$operationKey=bin2hex(random_bytes(16));
+$catalogueView=$section==='extras'&&$tab!=='stock'&&!$bookingId&&in_array($form,['','extra_save'],true);
+$loadStayView=static function()use($catalogueView,$service,$actor,&$bookingId):array{
+    return $catalogueView&&!$bookingId ? ['extras'=>$service->extrasCatalogue($actor)] : $service->snapshot($actor,$bookingId);
+};
 $layoutTitle=match($section){'extras'=>'Extras & Stock','rooms'=>'Property & Audits','folios'=>'Guest Stay Account','activity'=>'Activity','areas'=>'Property & Audits','departures'=>'Departure Incidents',default=>'Check-In & Occupancy'};
 try {
     $service->installed();if($form==='refund'&&!$canAuthorizeDeparture)throw new \Tivoli\Security\PermissionDenied('Only the configured finance owner records actual guest refunds.');
-    if($form==='extra_save'&&$isAdmin)$extraCategories=\Tivoli\Service\ExtraCategories::current($service->repo)['entries'];
+    $canEditExtras=$isAdmin&&in_array('extras.manage',access_service()->repo->privileges($actor),true);
+    if($form==='extra_save'&&$canEditExtras)$extraCategories=\Tivoli\Service\ExtraCategories::current($service->repo)['entries'];
     if($section==='areas')$auditAreas=\Tivoli\Service\AuditAreas::current($service->repo);
-    $cleaningChecklist=\Tivoli\Service\CleaningChecklist::current($service->repo);
-    $inspectionChecklist=\Tivoli\Service\CleaningChecklist::current($service->repo,'inspection');
+    if(!$catalogueView){
+        $cleaningChecklist=\Tivoli\Service\CleaningChecklist::current($service->repo);
+        $inspectionChecklist=\Tivoli\Service\CleaningChecklist::current($service->repo,'inspection');
+    }
     if(($_GET['export'] ?? '')==='csv'){require dirname(__DIR__).'/bootstrap/stay-export.php';stay_export_csv($actor);}
     // Expire abandoned confirmations; keep the action identity across uncertain outcomes.
     foreach($_SESSION['stay_confirmations'] ?? [] as $token=>$pending){if(($pending['expires'] ?? 0)<time())unset($_SESSION['stay_confirmations'][$token]);}
@@ -113,6 +120,7 @@ try {
         elseif(in_array($action,['clean','inspect'],true))$query=['section'=>'board'];
         elseif(in_array($action,['area_audit','area_followup'],true))$query=['section'=>'areas','range'=>'all'];
         elseif(in_array($action,['room_save','fault','repair','release_fault','room_audit'],true))$query=['section'=>'rooms','tab'=>in_array($action,['fault','repair','release_fault'],true)?'faults':($action==='room_audit'?'audits':'master')];
+        if($action==='extra_save'&&$catalogueView)$query+=\Tivoli\Domain\Stay\ExtrasCatalogue::filters($_GET);
         header('Location: '.stay_url($query).'#'.(in_array($action,['clear_balance','allow_checkout'],true)?'stay-action':'stay-result'));exit;
         }
     }
@@ -121,7 +129,7 @@ try {
         if(!$pending||$pending['actor']!==$actor||$pending['expires']<time())throw new RuntimeException('Confirmation expired. Review the guest account again.');
         $confirmation=$pending+['token'=>$token];$bookingId=(int)$pending['input']['booking_id'];
     }
-    $view=$service->snapshot($actor,$bookingId);
+    $view=$loadStayView();
     $preparationFilter=is_string($_GET['preparation']??null)&&in_array($_GET['preparation'],['ready','needs_cleaning','cleaning','inspection','blocked'],true)?$_GET['preparation']:'all';
     $preparation=[];$stayPreparation=null;
     $housekeeping=new \Tivoli\Service\HousekeepingService(access_service());
@@ -139,7 +147,7 @@ try {
     unset($_SESSION['stay_notice'],$_SESSION['stay_notice_operation']);
 }catch(Throwable $exception){
     $error=access_error($exception);$formValues=$_POST;
-    try{$view=$service->snapshot($actor,$bookingId);}catch(Throwable $unavailable){$view=[];}
+    try{$view=$loadStayView();}catch(Throwable $unavailable){$view=[];}
     if($section==='areas'){try{$areaAudits=$service->areaAudits($actor,array_intersect_key($_GET,array_flip(['week','range','before','history','history_before','audit_key'])));}catch(Throwable $ignored){}}
     if($exception instanceof \Tivoli\Security\PermissionDenied)http_response_code(403);elseif($exception instanceof PDOException)http_response_code(503);elseif(http_response_code()<400)http_response_code(400);
 }

@@ -5,6 +5,8 @@
 <?php endif ?>
 <script src="<?=access_h(workspace_asset_url('assets/js/app.js'))?>" defer></script>
 <meta name="theme-color" content="#193e34">
+<link rel="stylesheet" href="<?=access_h(workspace_asset_url('assets/css/workspace-tabs.css'))?>">
+<script src="<?=access_h(workspace_asset_url('assets/js/workspace-tabs.js'))?>" defer></script>
 
 <link rel="stylesheet" href="<?=access_h(workspace_asset_url('assets/css/confirmations.css'))?>">
 <script src="<?=access_h(workspace_asset_url('assets/js/confirmations.js'))?>" defer></script>

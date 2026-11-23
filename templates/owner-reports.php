@@ -99,7 +99,7 @@ require __DIR__.'/layouts/start.php';
         <?php if(!empty($data['charge_adjustments']['count'])):?><p>Guest charge adjustments posted in this range: <?=orMoney($data['charge_adjustments']['total'])?>. Room <?=orMoney($data['charge_adjustments']['room'])?> · Extras <?=orMoney($data['charge_adjustments']['extras'])?> · Incidentals <?=orMoney($data['charge_adjustments']['incidental'])?>. These change charges, not collections or stock quantities. Earlier closed snapshots remain fixed.</p><?php endif?>
         <p>As of <?=access_h(display_date($f['asOf']))?> UTC · Accra property time<?php if ($view!=='daily'): ?> · GHS<?php endif ?></p>
     </header>
-    <nav class="or-tabs" aria-label="Owner report views">
+    <nav class="or-tabs workspace-tab-strip" aria-label="Owner report views">
         <?php foreach (Reports::VIEWS as $key=>$label): ?>
             <a href="<?=orUrl(['view'=>$key])?>" <?=$key===$view?'aria-current="page"':''?>><?=access_h($label)?></a>
         <?php endforeach ?>

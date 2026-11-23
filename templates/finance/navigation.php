@@ -12,7 +12,7 @@ if(!$financeNavCanPurchase){
  if($financeNavPage==='purchases')$financeNavPage='providers';
 }
 ?>
-<nav class="app-section-nav finance-navigation" aria-label="Finance sections">
+<nav class="app-section-nav finance-navigation workspace-tab-strip" aria-label="Finance sections">
 <?php foreach($financeNavItems as $financeNavKey=>$financeNavLabel):
  if(in_array($financeNavKey,['daily','payroll','revenue','profit','activity'],true)&&!$financeNavAdmin)continue;
  if($financeNavKey==='weekly'&&!$financeNavService->canPostLate($financeNavActor))continue;

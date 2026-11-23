@@ -21,6 +21,16 @@ const root=path.resolve(__dirname,'../..'),evidence=fs.mkdtempSync(path.join(os.
  await check('[...document.querySelectorAll("nav a")].filter(a=>a.textContent==="Non-Sale Issues").length===1',who+' non-sale entry appears once');
  await check('document.querySelectorAll(".extras-navigation [aria-current=page]").length===1',who+' one active main tab');
  await check('document.documentElement.scrollWidth<=innerWidth',who+' page fits '+width);
+ if(width<681){
+   await check('!document.querySelector(".extras-navigation .workspace-tab-controls").hidden && document.querySelector(".extras-navigation .workspace-current-tab").textContent===document.querySelector(".extras-navigation .workspace-tab-links [aria-current]").textContent && document.querySelector(".extras-navigation .workspace-tab-links").hidden',who+' sees the current section and closed More menu');
+   await ev('document.querySelector(".extras-navigation .workspace-tab-more").focus();document.querySelector(".extras-navigation .workspace-tab-more").click()');
+   await check('!document.querySelector(".extras-navigation .workspace-tab-links").hidden && document.querySelector(".extras-navigation .workspace-tab-more").getAttribute("aria-expanded")==="true" && [...document.querySelectorAll(".extras-navigation .workspace-tab-links a")].some(a=>a.innerText==="Non-Sale Issues" || a.innerText==="Stock Counts")',who+' can reveal other destinations');
+   await check('document.documentElement.scrollWidth<=innerWidth','Expanded More menu fits '+width);
+   await ev('document.querySelector(".extras-navigation .workspace-tab-more").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
+   await check('document.querySelector(".extras-navigation .workspace-tab-links").hidden && document.activeElement===document.querySelector(".extras-navigation .workspace-tab-more")','Escape closes More and returns focus');
+ } else {
+   await check('document.querySelector(".extras-navigation .workspace-tab-controls").hidden && !document.querySelector(".extras-navigation .workspace-tab-links").hidden',who+' desktop displays full tab strip');
+ }
  const shot=await page('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});fs.writeFileSync(evidence+'/extras-'+who+'-'+width+'-'+views+'.png',Buffer.from(shot.data,'base64'));views++;
  }}}
  assert.deepEqual(errors,[]);console.log('TOTAL '+checks+' extras navigation browser assertions and '+views+' responsive views passed');console.log('EVIDENCE '+evidence);

@@ -9,7 +9,7 @@
 <details class="oe-coverage"><summary>Coverage &amp; Limits</summary><p>Linked cash, wallet, guest recovery, purchasing, corrections, modern payroll, stock and property work appears here. Expense submissions track approval; approval does not prove payment. Standalone ordinary-expense settlements and unlinked legacy payroll requests remain in Finance &amp; Cash. Payroll recovery notes do not record money returned.</p><a href="<?=access_h(access_url('finance.php'))?>">Open Finance &amp; Cash</a></details>
 <?php if(in_array('unavailable',$data['coverage'],true)):?><p class="oe-warning" role="alert">Some sources are unavailable. This register is incomplete; an unavailable source has not been treated as resolved.</p><?php endif?>
 <?php if(in_array('restricted',$data['coverage'],true)):?><p class="oe-warning">Some workflows are outside your current permissions. Their private records and counts are excluded.</p><?php endif?>
-<nav class="app-section-nav" aria-label="Owner Exception Views"><?php foreach(['open'=>'Open','resolved'=>'Resolved','activity'=>'Activity'] as $v=>$label):?><a href="<?=access_h(oe_url(['view'=>$v]))?>#exception-action" <?=$f['view']===$v?'aria-current="page"':''?>><?=access_h($label)?></a><?php endforeach?></nav>
+<nav class="app-section-nav workspace-tab-strip" aria-label="Owner Exception Views"><?php foreach(['open'=>'Open','resolved'=>'Resolved','activity'=>'Activity'] as $v=>$label):?><a href="<?=access_h(oe_url(['view'=>$v]))?>#exception-action" <?=$f['view']===$v?'aria-current="page"':''?>><?=access_h($label)?></a><?php endforeach?></nav>
 <section id="exception-action" tabindex="-1">
 <?php if($selected):
 $registerReturn = $f;
