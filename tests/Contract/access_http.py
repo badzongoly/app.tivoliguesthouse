@@ -34,7 +34,7 @@ status, headers, body = admin.request('/auth/login.php', {'email':'admin@example
 check(status == 302 and headers['Location'].endswith('/owner_reports.php'), 'administrator login opens Owner Reports')
 check(admin.session_id() != before, 'successful login regenerates session ID')
 status, headers, body = admin.request('/users.php')
-check(status == 200 and 'Staff and access' in body and 'Create role' in body, 'management screen renders authenticated forms')
+check(status == 200 and 'System Access' in body and 'Create Role' in body, 'management screen renders authenticated forms')
 check('data-password-toggle' in body, 'password visibility buttons present')
 status, headers, body = admin.request('/audit.php')
 check(status == 200 and 'Audit trail' in body, 'audit viewer renders')
@@ -63,7 +63,7 @@ check(staff.request('/payments.php')[0] == 403, 'clerk cannot bypass report perm
 recover = Browser(); csrf = recover.csrf('/auth/forgot-password.php')
 status, headers, known = recover.request('/auth/forgot-password.php', {'csrf':csrf,'email':email})
 status, headers, unknown = recover.request('/auth/forgot-password.php', {'csrf':csrf,'email':'unknown-'+secrets.token_hex(5)+'@example.invalid'})
-message = 'If an eligible account matches, a password-reset link will be delivered.'
+message = 'If an eligible account matches, a password-reset link will be sent to your staff email.'
 check(message in known and message in unknown, 'recovery response does not disclose account existence')
 subprocess.run([r'C:\xampp\php\php.exe', str(ROOT/'scripts/send-reset-mail.php'), '--test'], check=True, stdout=subprocess.DEVNULL)
 previews = [json.loads(p.read_text()) for p in (ROOT/'storage/mail-test').glob('*.json')]

@@ -1,5 +1,5 @@
 'use strict';
-document.querySelectorAll('.payroll form[data-confirm]').forEach(form=>form.addEventListener('submit',event=>{if(!window.confirm(form.dataset.confirm))event.preventDefault();}));
+
 const form=document.querySelector('[data-payroll-base]');
 if(form){
  const parse=v=>/^\d{1,10}(\.\d{1,2})?$/.test(v)?BigInt(v.split('.')[0])*100n+BigInt((v.split('.')[1]||'').padEnd(2,'0')):null;

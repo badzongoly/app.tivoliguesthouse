@@ -38,6 +38,14 @@ import subprocess
 email=subprocess.run(['C:/xampp/php/php.exe','-r',other_email_code],cwd=ROOT,capture_output=True,text=True,check=True).stdout.strip()
 assert email.endswith('@example.invalid')
 other.login(email,'Synthetic Finance Passphrase 123!')
+# Each billing run owns its resources; previous suites may leave their room dirty or occupied.
+setup="""putenv('TIVOLI_TEST_MODE=1');require 'bootstrap/stays.php';$r=access_service()->repo;
+if((int)$r->run('SELECT @@port')->fetchColumn()!==3307||$r->run('SELECT DATABASE()')->fetchColumn()!=='tivoli_auth_test'||$r->run('SELECT marker FROM security_test_marker')->fetchColumn()!=='synthetic-auth-only-v1')exit(2);
+$r->run("INSERT INTO rooms(name,type,rate,status) VALUES(?,'Standard','300.00','vacant')",['Synthetic paid billing '.bin2hex(random_bytes(6))]);$room=(int)$r->db->lastInsertId();
+$r->run("INSERT INTO stay_room_settings(room_id,short_rate,short_enabled,ready_state) VALUES(?,'150.00',1,'ready')",[$room]);
+$r->run("INSERT INTO extras(name,price,stock_qty,active) VALUES(?,'10.00','10.00',1)",['Synthetic paid billing extra '.bin2hex(random_bytes(6))]);
+echo json_encode(['room_id'=>$room,'extra_id'=>(int)$r->db->lastInsertId()],JSON_THROW_ON_ERROR);"""
+fixture.update(json.loads(subprocess.run(['C:/xampp/php/php.exe','-r',setup],cwd=ROOT,capture_output=True,text=True,encoding='utf-8',check=True).stdout))
 path='/occupancy.php?form=checkin&room_id='+str(fixture['room_id'])
 body=clerk.request(path)[2]
 check('Room Payment Received' in body and 'Confirm Check-In &amp; Record Receipt' in body,'arrival form exposes combined receipt action')

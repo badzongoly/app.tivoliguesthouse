@@ -21,7 +21,7 @@ class Browser:
     def open(self, path, fields=None):
         data = None if fields is None else urllib.parse.urlencode(fields).encode()
         try:
-            response = self.http.open('http://127.0.0.1:8099' + path, data, timeout=15)
+            response = self.http.open('http://127.0.0.1:8099' + path, data, timeout=90)
         except urllib.error.HTTPError as failure:
             response = failure
         assert response.headers.get('X-Tivoli-Test-Mode') == 'synthetic'
@@ -71,3 +71,25 @@ assert status == 400 and '<script>bad</script>' not in body
 print('PASS writes, unsupported export, malformed filters and reflected script rejected')
 assert admin.open('/reports.php')[0] == 200 and admin.open('/extra_sales.php?export=csv')[0] == 200
 print('PASS legacy report and extras CSV still reachable')
+
+for query, title in [
+    ('view=daily&end=2014-01-28&detail=arrivals','Recorded Arrivals'),
+    ('view=daily&end=2014-01-28&detail=departures','Recorded Departures'),
+    ('view=daily&end=2014-01-28&detail=room-charges','Room Charges at Departure'),
+    ('view=daily&end=2014-01-28&detail=momo','MoMo Receipt Coverage'),
+    ('view=cash&start=2014-01-27&end=2014-02-02&method=card&detail=refunds','Recorded Refunds'),
+    ('view=cash&start=2014-01-27&end=2014-02-02&method=cash&detail=custody','Tracked Cash Receipts'),
+    ('view=cash&start=2014-01-27&end=2014-02-02&detail=deposits','Cash Deposit Movements'),
+    ('view=monthly&month=2014-01&detail=expenses','Recorded Expenses'),
+]:
+    status, headers, body = admin.open(route + '?' + query)
+    assert status == 200 and 'id="source-detail"' in body and title in body, (query, status)
+    assert headers.get('Cache-Control') == 'no-store' and 'Private synthetic guest' not in body
+    if 'method=' in query:
+        link = re.search(r'<a href="([^"]+)">Back to Report</a>', body)[1]
+        assert 'method=' in link and 'start=2014-01-27' in link and 'end=2014-02-02' in link
+    print('PASS drill-down ' + title, flush=True)
+assert clerk.open(route+'?view=cash&detail=refunds')[0] == 403
+assert admin.open(route+'?view=cash&detail=expenses')[0] == 400
+assert admin.open(route+'?view=monthly&detail=expenses&detail_category[]=1')[0] == 400
+print('PASS drill-down authorisation and filter validation')

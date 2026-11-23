@@ -36,19 +36,21 @@ try {
     if (isset($query['export'])) throw new InvalidArgumentException('Owner Reports displays detail in the app.');
     $filters = OwnerReports::filters($query,$asOf);
     $data = $report->read($filters);
-    $expenseCorrectionService=new \Tivoli\Service\ExpenseCorrectionService(access_service());if((new \Tivoli\Service\FinanceService(access_service()))->installed()&&$expenseCorrectionService->owner((int)$user['id']))$expenseCorrectionAttention=$expenseCorrectionService->attentionCount((int)$user['id']);
-    if((new \Tivoli\Service\FinanceService(access_service()))->canPostLate((int)$user['id'])&&in_array('hr.salary',access_service()->repo->privileges((int)$user['id']),true))$payrollAttention=(new \Tivoli\Service\PayrollService(access_service()))->attentionCount((int)$user['id']);
-    if((new \Tivoli\Service\FinanceService(access_service()))->canPostLate((int)$user['id'])
-        &&in_array('bookings.manage',access_service()->repo->privileges((int)$user['id']),true)){
-        $cases=(new \Tivoli\Service\StayService(access_service()))->departureCases((int)$user['id']);
-        $departureIncidentCount=count(array_filter($cases,fn($row)=>!$row['resolved']));
-        $handoverCases=(new \Tivoli\Service\HandoverService(access_service()))->attention((int)$user['id']);$handoverAttention=$handoverCases['pending']+$handoverCases['exceptions']+$handoverCases['cash'];
-        $purchaseAttention=(new \Tivoli\Service\PurchaseService(access_service()))->attention((int)$user['id'])['count'];
-        $stockCountAttention=(new \Tivoli\Service\StockCountService(access_service()))->attention((int)$user['id'])['count'];
-        $housekeepingAttention=(new \Tivoli\Service\HousekeepingService(access_service()))->attention((int)$user['id'])['count'];
-        $purchaseCorrectionAttention=(new \Tivoli\Service\PurchaseCorrectionService(access_service()))->attentionCount((int)$user['id']);
-        $guestChargeAttention=(new \Tivoli\Service\GuestChargeCorrectionService(access_service()))->attentionCount((int)$user['id']);
-        $correctionAttention=(new \Tivoli\Service\ReceiptCorrectionService(access_service()))->attentionCount((int)$user['id']);
+    if ($filters['detail']==='') {
+        $expenseCorrectionService=new \Tivoli\Service\ExpenseCorrectionService(access_service());if((new \Tivoli\Service\FinanceService(access_service()))->installed()&&$expenseCorrectionService->owner((int)$user['id']))$expenseCorrectionAttention=$expenseCorrectionService->attentionCount((int)$user['id']);
+        if((new \Tivoli\Service\FinanceService(access_service()))->canPostLate((int)$user['id'])&&in_array('hr.salary',access_service()->repo->privileges((int)$user['id']),true))$payrollAttention=(new \Tivoli\Service\PayrollService(access_service()))->attentionCount((int)$user['id']);
+        if((new \Tivoli\Service\FinanceService(access_service()))->canPostLate((int)$user['id'])
+            &&in_array('bookings.manage',access_service()->repo->privileges((int)$user['id']),true)){
+            $cases=(new \Tivoli\Service\StayService(access_service()))->departureCases((int)$user['id']);
+            $departureIncidentCount=count(array_filter($cases,fn($row)=>!$row['resolved']));
+            $handoverCases=(new \Tivoli\Service\HandoverService(access_service()))->attention((int)$user['id']);$handoverAttention=$handoverCases['pending']+$handoverCases['exceptions']+$handoverCases['cash'];
+            $purchaseAttention=(new \Tivoli\Service\PurchaseService(access_service()))->attention((int)$user['id'])['count'];
+            $stockCountAttention=(new \Tivoli\Service\StockCountService(access_service()))->attention((int)$user['id'])['count'];
+            $housekeepingAttention=(new \Tivoli\Service\HousekeepingService(access_service()))->attention((int)$user['id'])['count'];
+            $purchaseCorrectionAttention=(new \Tivoli\Service\PurchaseCorrectionService(access_service()))->attentionCount((int)$user['id']);
+            $guestChargeAttention=(new \Tivoli\Service\GuestChargeCorrectionService(access_service()))->attentionCount((int)$user['id']);
+            $correctionAttention=(new \Tivoli\Service\ReceiptCorrectionService(access_service()))->attentionCount((int)$user['id']);
+        }
     }
 } catch (InvalidArgumentException $e) {
     http_response_code(400);

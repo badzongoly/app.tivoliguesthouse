@@ -7,3 +7,22 @@
 .stay-property-nav a[aria-current="page"]{background:#193d34;color:#fff}
 
 .stay-incident p,.stay-incident h2,.stay-incident h3,.stay-incident a{overflow-wrap:anywhere}
+
+.stay-optional { margin-block: 1rem; }
+.stay-optional summary { cursor: pointer; padding-block: .75rem; }
+@media (max-width: 600px) {
+    .stay-form .button, .stay-actions .button, .stay-room .button { min-height: 44px; }
+}
+
+.stay-room-selection { display: grid; gap: 1rem; }
+.stay-room-selection .stay-room[aria-current="true"] { outline: 2px solid var(--app-green, #193e34); outline-offset: -2px; }
+@media (min-width: 900px) and (max-width: 1280px) and (orientation: landscape) {
+    .stay-room-selection { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); align-items: start; }
+    .stay-room-selection > .stay-action { grid-column: 2; grid-row: 1; min-width: 0; }
+    .stay-room-selection > .stay-board-pane { grid-column: 1; grid-row: 1; min-width: 0; }
+    .stay-room-selection .stay-rooms, .stay-room-selection .stay-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.stay-board-search { margin-block: .75rem; }
+.stay-board-search input { min-height: 44px; width: min(100%, 21rem); }
+.stay-room[hidden] { display: none !important; }

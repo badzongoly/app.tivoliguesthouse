@@ -10,7 +10,7 @@ try {
         exit;
     }
     $privilege=match($endpoint) {
-        'occupancy.php','guest-id.php','handover.php'=>'bookings.manage','dashboard.php'=>'dashboard.view','bookings.php','checkin.php','checkout.php'=>'bookings.manage',
+        'occupancy.php'=>(($_GET['section']??null)==='housekeeping'?null:'bookings.manage'),'guest-id.php','handover.php'=>'bookings.manage','dashboard.php'=>'dashboard.view','bookings.php','checkin.php','checkout.php'=>'bookings.manage',
         'rooms.php','fault-attachment.php'=>'rooms.manage','extras.php'=>'extras.manage','stock.php'=>'stock.manage',
         'extra_sales.php'=>'sales.view','reports.php','owner_reports.php'=>'reports.view','payments.php'=>'payments.view',
         'reminders.php','owner-exceptions.php','financial-corrections.php','payroll.php','weekly-audits.php','housekeeping.php','stock-counts.php','stock-issues.php','purchases.php','finance.php','finance-evidence.php'=>null,'expenses.php'=>null,'admin_recovery.php'=>'recovery.manage',
@@ -33,7 +33,7 @@ try {
     elseif ($endpoint==='owner-exceptions.php') { (new \Tivoli\Service\OwnerExceptionService(access_service()))->permit((int)$user['id']); }
     elseif ($endpoint==='payroll.php') { (new \Tivoli\Service\PayrollService(access_service()))->permit((int)$user['id']); }
     elseif ($endpoint==='weekly-audits.php') { (new \Tivoli\Service\WeeklyAuditService(access_service()))->permit((int)$user['id']); }
-    elseif ($endpoint==='housekeeping.php') { (new \Tivoli\Service\HousekeepingService(access_service()))->permit((int)$user['id']); }
+    elseif ($endpoint==='housekeeping.php'||($endpoint==='occupancy.php'&&($_GET['section']??null)==='housekeeping')) { (new \Tivoli\Service\HousekeepingService(access_service()))->permit((int)$user['id']); }
     elseif ($endpoint==='stock-issues.php') { (new \Tivoli\Service\StockIssueService(access_service()))->permit((int)$user['id']); }
     elseif ($endpoint==='stock-counts.php') { (new \Tivoli\Service\StockCountService(access_service()))->permit((int)$user['id']); }
     elseif ($endpoint==='purchases.php') { (new \Tivoli\Service\PurchaseService(access_service()))->permit((int)$user['id']); }

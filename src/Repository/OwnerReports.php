@@ -11,6 +11,11 @@ final class OwnerReports
         'extras'=>'Extras', 'monthly'=>'Monthly Review',
     ];
     public const METHODS = ['cash'=>'Cash','momo'=>'MoMo','card'=>'Card','bank'=>'Bank','other'=>'Other','unknown'=>'Unknown'];
+    private const DETAILS = [
+        'daily'=>['room-charges','arrivals','departures','momo'],
+        'cash'=>['refunds','momo','custody','deposits'],
+        'monthly'=>['expenses'],
+    ];
     private const PAGE_SIZE = 50;
     private const ROOMS = "LOWER(TRIM(r.name)) <> 'service' AND LOWER(TRIM(r.type)) <> 'service'";
 
@@ -18,7 +23,7 @@ final class OwnerReports
 
     public static function filters(array $query, DateTimeImmutable $asOf): array
     {
-        foreach (['view','start','end','room','item','method','page'] as $key) {
+        foreach (['view','start','end','room','item','method','page','detail','detail_category'] as $key) {
             if (isset($query[$key]) && !is_string($query[$key])) throw new InvalidArgumentException('Choose valid report filters.');
         }
         $view = $query['view'] ?? 'daily';
@@ -48,6 +53,15 @@ final class OwnerReports
             if (!preg_match('/^[1-9][0-9]{0,8}$/D', $value)) throw new InvalidArgumentException('Choose a valid report filter.');
             return (int)$value;
         };
+        $detail = $query['detail'] ?? '';
+        if ($detail !== '' && !in_array($detail,self::DETAILS[$view] ?? [],true)) {
+            throw new InvalidArgumentException('Choose a detail for this report.');
+        }
+        $category = $query['detail_category'] ?? '';
+        if ($category !== '' && ($detail !== 'expenses'
+            || ($category !== 'uncategorised' && !$id('detail_category')))) {
+            throw new InvalidArgumentException('Choose a valid expense category detail.');
+        }
         $method = $view === 'cash' ? ($query['method'] ?? '') : '';
         if ($method !== '' && !isset(self::METHODS[$method])) throw new InvalidArgumentException('Choose a valid payment method.');
         $from = $start->format('Y-m-d H:i:s');
@@ -56,7 +70,7 @@ final class OwnerReports
             'view'=>$view, 'start'=>$start->format('Y-m-d'), 'end'=>$end->format('Y-m-d'),
             'month'=>$selectedMonth, 'from'=>$from, 'until'=>$until, 'asOf'=>$asOf->format('Y-m-d H:i:s'),
             'today'=>$today, 'method'=>$method, 'room'=>$view === 'room' ? $id('room') : 0,
-            'item'=>$view === 'extras' ? $id('item') : 0, 'page'=>$id('page') ?: 1,
+            'item'=>$view === 'extras' ? $id('item') : 0, 'page'=>$id('page') ?: 1, 'detail'=>$detail, 'detail_category'=>$category,
         ];
     }
 
@@ -72,6 +86,9 @@ final class OwnerReports
                 && (bool)$this->repo->run('SELECT 1 FROM stay_schema WHERE version=2')->fetchColumn();
             $finance = in_array('finance_schema', $tables, true)
                 && (bool)$this->repo->run('SELECT 1 FROM finance_schema WHERE id=1')->fetchColumn();
+            if (!empty($f['detail'])) {
+                return ['detail'=>$this->detail($f,$stays,$finance,in_array('stay_refunds',$tables,true)),'finance'=>$finance];
+            }
             $data=match ($f['view']) {
                 'daily'=>$this->daily($f, $stays, $finance),
                 'room'=>$this->roomPerformance($f, $stays, $finance),
@@ -79,6 +96,7 @@ final class OwnerReports
                 'extras'=>$this->extras($f, $stays),
                 'monthly'=>$this->monthly($f, $finance),
             };
+            $data['detail']=null;
             $data['payroll_adjustments']=$finance?PayrollAccounting::period($this->repo,$f['start'],$f['end'],$f['asOf']):null;$data['purchase_adjustments']=$finance?PurchaseAccounting::period($this->repo,$f['start'],$f['end'],$f['asOf']):null;$data['charge_adjustments']=$finance?ChargeAccounting::period($this->repo,$f['start'],$f['end'],$f['asOf'],$f['item'],$f['room']):null;$data['receipt_adjustments']=$finance?ReceiptAccounting::period($this->repo,$f['start'],$f['end'],$f['asOf']):null;$data['expense_adjustments']=$finance?ExpenseAccounting::period($this->repo,$f['start'],$f['end'],$f['asOf']):null;return $data;
         } finally {
             $db->exec('ROLLBACK');
@@ -114,6 +132,82 @@ final class OwnerReports
         return [$sql,$values];
     }
 
+    private function roomChargeRows(bool $finance): string
+    {
+        return "SELECT d.booking_id,d.room_minor minor,d.posting_at,d.is_adjustment,r.name room
+            FROM (".DepartureRevenue::sql($finance).") d JOIN bookings b ON b.id=d.booking_id JOIN rooms r ON r.id=b.room_id
+            WHERE d.posting_at>=? AND d.posting_at<? AND ".self::ROOMS;
+    }
+
+    private function detail(array $f, bool $stays, bool $finance, bool $refunds): ?array
+    {
+        $detail = $f['detail'] ?? '';
+        $values = [$f['from'],$f['until']];
+        switch ($detail) {
+            case 'room-charges':
+                if (!$stays) return null;
+                $sql = $this->roomChargeRows($finance);
+                $order = 'posting_at DESC,booking_id DESC,is_adjustment DESC,minor';
+                break;
+            case 'arrivals':
+            case 'departures':
+                $arrival = $detail === 'arrivals';
+                $stamp = $arrival ? 'b.checkin_at' : 'b.actual_checkout';
+                $state = $arrival ? "IN ('active','checked_out')" : "='checked_out'";
+                $sql = "SELECT b.id booking_id,r.name room,$stamp posting_at
+                    FROM (".DepartureFacts::source($finance).") b JOIN rooms r ON r.id=b.room_id
+                    WHERE b.operational_status $state AND $stamp>=? AND $stamp<? AND ".self::ROOMS;
+                $order = 'posting_at DESC,booking_id DESC';
+                break;
+            case 'refunds':
+                if (!$refunds) return null;
+                $sql = 'SELECT id,booking_id,payment_id,created_at posting_at,amount_minor minor
+                    FROM stay_refunds WHERE created_at>=? AND created_at<?';
+                $order = 'posting_at DESC,id DESC';
+                break;
+            case 'expenses':
+                $sql = "SELECT e.id,e.source_expense,e.source,e.expense_date posting_at,e.vendor,
+                    COALESCE(c.name,'Uncategorised') category,CAST(e.amount*100 AS SIGNED) minor
+                    FROM (".ExpenseAccounting::costSql($finance,$f['asOf']).") e
+                    LEFT JOIN expense_categories c ON c.id=e.category_id WHERE e.expense_date>=? AND e.expense_date<=?";
+                $values = [$f['month'].'-01',$f['end']];
+                $category=$f['detail_category'] ?? '';
+                if ($category==='uncategorised') {
+                    $sql .= ' AND e.category_id IS NULL';
+                } elseif ($category!=='') {
+                    $sql .= ' AND e.category_id=?';
+                    $values[]=(int)$category;
+                }
+                $order = 'posting_at DESC,source,id DESC,minor,category';
+                break;
+            case 'momo':
+                if (!$finance) return null;
+                [$source,$params]=$this->receiptSource($f,$finance);
+                [$sql,$values]=$this->momoRows($source,$params,$f['asOf']);
+                if ($f['view']==='daily') $sql = "SELECT * FROM ($sql) m WHERE coverage='Awaiting review'";
+                $order = 'created_at DESC,source,id DESC';
+                break;
+            case 'custody':
+                if (!$finance) return null;
+                [$source,$params]=$this->receiptSource($f,$finance);
+                [$sql,$values]=$this->custodyRows($f,$source,$params);
+                $order = 'name,source,id DESC';
+                break;
+            case 'deposits':
+                if (!$finance) return null;
+                $sql = $this->depositRows($f);
+                $values = [$f['start'],$f['end'],$f['asOf']];
+                $order = 'posting_at DESC,id DESC,state';
+                break;
+            default:
+                return null;
+        }
+        $count=(int)$this->repo->run("SELECT COUNT(*) FROM ($sql) detail_rows",$values)->fetchColumn();
+        $page=$this->page($count,$f['page']);
+        $rows=$this->rows("SELECT * FROM ($sql) detail_rows ORDER BY $order LIMIT ".self::PAGE_SIZE.' OFFSET '.$page['offset'],$values);
+        return compact('page','rows');
+    }
+
     private function daily(array $f, bool $stays, bool $finance): array
     {
         $bookingSource=DepartureFacts::source($finance);
@@ -130,15 +224,14 @@ final class OwnerReports
             (SELECT COUNT(*) FROM (".$bookingSource.") b JOIN rooms r ON r.id=b.room_id WHERE b.operational_status='checked_out'
              AND b.actual_checkout>=? AND b.actual_checkout<? AND ".self::ROOMS.") departures",
             [$f['from'],$f['until'],$f['from'],$f['until']])->fetch();
-        $roomCharges = $stays ? $this->repo->run("SELECT COALESCE(SUM(d.room_minor),0) minor,COALESCE(SUM(d.is_adjustment=0),0) count
-            FROM (".DepartureRevenue::sql($finance).") d JOIN bookings b ON b.id=d.booking_id JOIN rooms r ON r.id=b.room_id
-            WHERE d.posting_at>=? AND d.posting_at<? AND ".self::ROOMS,
+        $roomCharges = $stays ? $this->repo->run("SELECT COALESCE(SUM(minor),0) minor,
+            COALESCE(SUM(is_adjustment=0),0) count FROM (".$this->roomChargeRows($finance).") charges",
             [$f['from'],$f['until']])->fetch() : null;
-        [$matchingReceipts,$matchingValues]=$finance?$this->effectiveReceipts($receipts,$values,$f['asOf']):[$receipts,$values];
-        $pending = $finance ? $this->repo->run("SELECT COUNT(*) FROM ($matchingReceipts) x
-                WHERE x.minor>0 AND x.source<>'correction' AND x.method='momo' AND (x.source='income' OR x.id>(SELECT payment_cursor FROM finance_schema WHERE id=1))
-                AND ".\Tivoli\Domain\Finance\CashResolution::verifiedSql('x.source','x.id','x.minor',$this->repo->db->quote($f['asOf']))."<x.minor",
-                $matchingValues)->fetchColumn() : null;
+        $pending = null;
+        if ($finance) {
+            [$momo,$momoValues]=$this->momoRows($receipts,$values,$f['asOf']);
+            $pending=$this->repo->run("SELECT COUNT(*) FROM ($momo) m WHERE coverage='Awaiting review'",$momoValues)->fetchColumn();
+        }
         return compact('payment','rooms','stayCounts','roomCharges','pending','finance');
     }
 
@@ -184,29 +277,43 @@ final class OwnerReports
         $deposits = null;
         $custody = null;
         if ($finance) {
-            [$matchingSource,$matchingValues]=$this->effectiveReceipts($source,array_slice($values,0,$f['method']?-1:null),$f['asOf']);
-            $momo = $this->rows("SELECT coverage,COUNT(*) count,SUM(minor) minor FROM (
-                SELECT x.minor,CASE
-                    WHEN x.source='correction' THEN 'Recording adjustments'
-                    WHEN ".\Tivoli\Domain\Finance\CashResolution::verifiedSql('x.source','x.id','x.minor',$this->repo->db->quote($f['asOf'])).">=x.minor THEN 'Matched by staff'
-                    WHEN x.source='payment' AND x.id<=(SELECT payment_cursor FROM finance_schema WHERE id=1) THEN 'Historical coverage unknown'
-                    ELSE 'Awaiting review' END coverage
-                FROM ($matchingSource) x WHERE x.method='momo' AND x.minor>0) buckets GROUP BY coverage ORDER BY coverage",
-                $matchingValues);
-            $custody = $this->custody($f, $source, array_slice($values,0,$f['method']?-1:null));
-            $verified=\Tivoli\Domain\Finance\CashResolution::verifiedSql("'deposit'",'f.id','f.amount_minor',$this->repo->db->quote($f['asOf']));
-            $returned=\Tivoli\Domain\Finance\CashResolution::returnedSql('f.id',$this->repo->db->quote($f['asOf']));
-            $deposits=$this->rows("SELECT state,COUNT(*) count,SUM(minor) minor FROM (
-                SELECT CASE mode WHEN 1 THEN 'Wallet confirmation recorded' WHEN 2 THEN 'In transit' ELSE 'Returned to custody' END state,
-                CASE mode WHEN 1 THEN q.verified WHEN 2 THEN q.amount_minor-q.verified-q.returned ELSE q.returned END minor
-                FROM (SELECT f.id,f.amount_minor,$verified verified,$returned returned FROM finance_events f WHERE f.kind='deposit_recorded' AND f.effective_date>=? AND f.effective_date<=? AND f.created_at<?) q
-                CROSS JOIN (SELECT 1 mode UNION ALL SELECT 2 UNION ALL SELECT 3) modes
-                ) deposit_parts WHERE minor>0 GROUP BY state ORDER BY state",[$f['start'],$f['end'],$f['asOf']]);
+            $unfilteredValues = array_slice($values,0,$f['method']?-1:null);
+            [$momoSql,$momoValues]=$this->momoRows($source,$unfilteredValues,$f['asOf']);
+            $momo=$this->rows("SELECT coverage,COUNT(*) count,SUM(minor) minor FROM ($momoSql) m GROUP BY coverage ORDER BY coverage",$momoValues);
+            $custody = $this->custody($f,$source,$unfilteredValues);
+            $depositSql = $this->depositRows($f);
+            $deposits=$this->rows("SELECT state,COUNT(*) count,SUM(minor) minor FROM ($depositSql) d GROUP BY state ORDER BY state",[$f['start'],$f['end'],$f['asOf']]);
         }
         $refunds = $refundsAvailable ? $this->repo->run('SELECT COALESCE(SUM(amount_minor),0) FROM stay_refunds WHERE created_at>=? AND created_at<?',
             [$f['from'],$f['until']])->fetchColumn() : null;
         $undated = $this->repo->run('SELECT COUNT(*) FROM payments WHERE created_at IS NULL')->fetchColumn();
         return compact('methods','page','receipts','momo','finance','deposits','custody','refunds','undated');
+    }
+
+    private function momoRows(string $source,array $values,string $asOf): array
+    {
+        [$effective,$values]=$this->effectiveReceipts($source,$values,$asOf);
+        $verified=\Tivoli\Domain\Finance\CashResolution::verifiedSql('x.source','x.id','x.minor',$this->repo->db->quote($asOf));
+        $sql="SELECT x.*,CASE
+            WHEN $verified>=x.minor THEN 'Matched by staff'
+            WHEN x.source='payment' AND x.id<=(SELECT payment_cursor FROM finance_schema WHERE id=1) THEN 'Historical coverage unknown'
+            ELSE 'Awaiting review' END coverage
+            FROM ($effective) x WHERE x.method='momo' AND x.minor>0";
+        return [$sql,$values];
+    }
+
+    private function depositRows(array $f): string
+    {
+        $cutoff=$this->repo->db->quote($f['asOf']);
+        $verified=\Tivoli\Domain\Finance\CashResolution::verifiedSql("'deposit'",'f.id','f.amount_minor',$cutoff);
+        $returned=\Tivoli\Domain\Finance\CashResolution::returnedSql('f.id',$cutoff);
+        return "SELECT * FROM (
+            SELECT q.id,q.posting_at,CASE mode WHEN 1 THEN 'Wallet confirmation recorded' WHEN 2 THEN 'In transit' ELSE 'Returned to custody' END state,
+            CASE mode WHEN 1 THEN q.verified WHEN 2 THEN q.amount_minor-q.verified-q.returned ELSE q.returned END minor
+            FROM (SELECT f.id,f.effective_date posting_at,f.amount_minor,$verified verified,$returned returned
+                FROM finance_events f WHERE f.kind='deposit_recorded' AND f.effective_date>=? AND f.effective_date<=? AND f.created_at<?) q
+            CROSS JOIN (SELECT 1 mode UNION ALL SELECT 2 UNION ALL SELECT 3) modes
+            ) deposit_parts WHERE minor>0";
     }
 
     private function effectiveReceipts(string $receipts,array $values,string $asOf):array
@@ -215,7 +322,7 @@ final class OwnerReports
         $values[]=$asOf;return [$sql,$values];
     }
 
-    private function custody(array $f, string $receipts, array $values): array
+    private function custodyRows(array $f, string $receipts, array $values): array
     {
         // Current custody projection of original cohorts, not new cash or a restated receipt period.
         [$receipts,$values]=$this->effectiveReceipts($receipts,$values,$f['asOf']);
@@ -232,10 +339,10 @@ final class OwnerReports
         $resolutionQty=str_replace('z.payload',ReceiptReallocation::payloadSql('z',$cutoff),$resolutionQty);
         $returns="COALESCE((SELECT SUM($resolutionQty) FROM finance_events z WHERE z.kind='cd_cash_returned' AND z.target_type='deposit' AND z.target_id=CONVERT(d.id USING utf8mb4) COLLATE utf8mb4_unicode_ci AND z.created_at<$cutoff),0)";
         $delta="COALESCE((SELECT SUM(CASE WHEN z.kind='cd_credit' THEN $resolutionQty ELSE -$resolutionQty END) FROM finance_events z WHERE z.kind IN ('cd_credit','cd_reversed') AND z.target_type='deposit' AND z.target_id=CONVERT(d.id USING utf8mb4) COLLATE utf8mb4_unicode_ci AND z.created_at<$cutoff),0)";
-        $rows = $this->rows("SELECT a.actor_id,COALESCE(u.name,'Unknown recorder') name,SUM(a.minor) receipts,
-                SUM(a.minor-a.reserved) held,SUM(a.reserved-a.confirmed) transit,SUM(a.confirmed) confirmed
+        $sql="SELECT a.source,a.id,a.booking_id,a.created_at,a.actor_id,COALESCE(u.name,'Unknown recorder') name,a.minor receipts,
+                a.minor-a.reserved held,a.reserved-a.confirmed transit,a.confirmed
             FROM (
-                SELECT x.source,x.id,x.minor,COALESCE(s.actor_id,i.actor_id) actor_id,
+                SELECT x.source,x.id,x.booking_id,x.created_at,x.minor,COALESCE(s.actor_id,i.actor_id) actor_id,
                     COALESCE(SUM($allocation-$returns),0) reserved,
                     COALESCE(SUM((CASE WHEN c.id IS NOT NULL THEN $allocation ELSE 0 END)+$delta),0) confirmed
                 FROM ($receipts) x
@@ -247,9 +354,17 @@ final class OwnerReports
                     WHERE c1.kind='deposit_confirmed' AND c1.target_type='deposit'
                     AND c1.target_id=CONVERT(d.id USING utf8mb4) COLLATE utf8mb4_unicode_ci AND c1.created_at<?)
                 WHERE x.method='cash' AND (x.source='income' OR x.id>(SELECT payment_cursor FROM finance_schema WHERE id=1))
-                GROUP BY x.source,x.id,x.minor,COALESCE(s.actor_id,i.actor_id)
-            ) a LEFT JOIN users u ON u.id=a.actor_id GROUP BY a.actor_id,u.name ORDER BY name,a.actor_id",
-            [...$values,$f['asOf'],$f['asOf']]);
+                GROUP BY x.source,x.id,x.booking_id,x.created_at,x.minor,COALESCE(s.actor_id,i.actor_id)
+            ) a LEFT JOIN users u ON u.id=a.actor_id";
+        return [$sql,[...$values,$f['asOf'],$f['asOf']]];
+    }
+
+    private function custody(array $f,string $receipts,array $values): array
+    {
+        [$sql,$params]=$this->custodyRows($f,$receipts,$values);
+        $rows=$this->rows("SELECT actor_id,name,SUM(receipts) receipts,SUM(held) held,
+            SUM(transit) transit,SUM(confirmed) confirmed FROM ($sql) c GROUP BY actor_id,name ORDER BY name,actor_id",$params);
+        [$receipts,$values]=$this->effectiveReceipts($receipts,$values,$f['asOf']);
         $historical = $this->repo->run("SELECT COALESCE(SUM(minor),0) FROM ($receipts) x WHERE x.method='cash'
             AND x.source='payment' AND x.id<=(SELECT payment_cursor FROM finance_schema WHERE id=1)",$values)->fetchColumn();
         return compact('rows','historical');
@@ -314,7 +429,7 @@ final class OwnerReports
             $month = $d->format('Y-m');
             $months[$month] = ['receipts'=>$income[$month]??0,'expenses'=>$expenses[$month]??0];
         }
-        $categories = $this->rows("SELECT COALESCE(c.name,'Uncategorised') name,ROUND(SUM(e.amount)*100,0) minor
+        $categories = $this->rows("SELECT e.category_id,COALESCE(c.name,'Uncategorised') name,ROUND(SUM(e.amount)*100,0) minor
             FROM ($expenseSource) e LEFT JOIN expense_categories c ON c.id=e.category_id
             WHERE e.expense_date>=? AND e.expense_date<=? GROUP BY e.category_id,c.name ORDER BY minor DESC,name,e.category_id",
             [$f['month'].'-01',$f['end']]);

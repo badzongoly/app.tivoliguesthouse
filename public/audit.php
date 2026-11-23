@@ -1,7 +1,9 @@
 <?php
 require_once dirname(__DIR__).'/src/Security/require_login.php';
-$repo=access_service()->repo; $error=''; $events=[]; $values=[]; $where=[];
+$repo=access_service()->repo; $error=''; $events=[]; $values=[]; $where=[]; $canViewAllActivity=false;
 try {
+    $canViewAllActivity=$repo->isAdmin((int)$user['id']);
+    if(!$canViewAllActivity){$where[]='e.actor_id=?';$values[]=(int)$user['id'];}
     foreach(['action','outcome','actor','before','start','end'] as $key){if(isset($_GET[$key]) && !is_string($_GET[$key])){throw new RuntimeException('Invalid filters.');}}
     foreach(['action','outcome'] as $key){if(($_GET[$key] ?? '')!==''){if(strlen($_GET[$key])>80){throw new RuntimeException('Invalid filters.');}$where[]='e.'.$key.'=?';$values[]=$_GET[$key];}}
     foreach(['actor'=>'e.actor_id=?','before'=>'e.id<?'] as $key=>$expression){if(($_GET[$key] ?? '')!==''){$number=filter_var($_GET[$key],FILTER_VALIDATE_INT);if($number===false || $number<1){throw new RuntimeException('Enter valid numeric identifiers.');}$where[]=$expression;$values[]=$number;}}

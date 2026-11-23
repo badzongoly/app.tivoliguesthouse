@@ -5,7 +5,6 @@ require dirname(__DIR__,2).'/bootstrap/security.php';
 $s=access_service();$r=$s->repo;
 if ($r->run('SELECT DATABASE()')->fetchColumn()!=='tivoli_auth_test' || $r->run('SELECT marker FROM security_test_marker')->fetchColumn()!=='synthetic-auth-only-v1') { throw new RuntimeException('Refusing an unverified test target'); }
 $r->run('DELETE FROM security_throttle');
-$r->run("UPDATE security_accounts SET active=0 WHERE user_id IN (SELECT id FROM users WHERE name='Synthetic concurrent admin')");
 $count=0;
 function check(bool $condition,string $label): void { global $count;if(!$condition){throw new RuntimeException('FAIL '.$label);} $count++;echo "PASS $label\n"; }
 function denied(callable $action,string $label): void {try{$action();}catch(Throwable $error){check(true,$label);return;}check(false,$label);}
@@ -34,8 +33,11 @@ check($r->user($staff)['role']==='clerk','custom role preserves legacy stored ro
 $s->manage($admin,$adminPass,'create_privilege',['code'=>'custom.test.'.$suffix,'description'=>'Synthetic custom privilege','reason'=>'Test privilege catalogue']);
 check(in_array('custom.test.'.$suffix,$r->privileges($admin),true),'custom privilege added and grantable by administrator');
 denied(fn()=>$s->manage($admin,$adminPass,'create_privilege',['code'=>'users.superadmin','description'=>'Invalid reserved namespace','reason'=>'Test reserved namespace']),'built-in privilege namespace protected');
+$accessOtherAdmins=$r->run("SELECT a.user_id,a.active FROM security_accounts a JOIN security_user_roles ur ON ur.user_id=a.user_id JOIN security_roles r ON r.id=ur.role_id WHERE r.name='admin' AND a.user_id<>?",[$admin])->fetchAll();
+try{foreach($accessOtherAdmins as $account)$r->run('UPDATE security_accounts SET active=0 WHERE user_id=?',[$account['user_id']]);
 denied(fn()=>$s->manage($admin,$adminPass,'assign_roles',['id'=>$admin,'ids'=>[],'reason'=>'Test last admin protection']),'last active administrator cannot lose role');
 check($r->isAdmin($admin),'failed last-admin update rolled back');
+}finally{foreach($accessOtherAdmins as $account)$r->run('UPDATE security_accounts SET active=? WHERE user_id=?',[$account['active'],$account['user_id']]);}
 denied(fn()=>$s->manage($admin,$adminPass,'set_active',['id'=>$admin,'active'=>'0','reason'=>'Test self deactivation']),'self deactivation denied');
 $version=(int)$r->user($staff)['session_version'];$nextPassword='Synthetic Changed Passphrase 456!';
 denied(fn()=>$s->changePassword($staff,'wrong',$nextPassword),'password change verifies current password');

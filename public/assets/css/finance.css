@@ -3,3 +3,12 @@
 .finance nav a[aria-current=page]{background:#193d34;color:#fff}
 
 .finance #costing-action h2{overflow-wrap:anywhere}
+
+@media (max-width: 600px) {
+    .finance .finance-payment-table { display: block; min-width: 0; }
+    .finance-payment-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .finance-payment-table tbody, .finance-payment-table tr { display: block; }
+    .finance-payment-table tr { margin-bottom: 1rem; border: 1px solid #d8e0d2; border-radius: .5rem; }
+    .finance-payment-table td { display: block; overflow-wrap: anywhere; }
+    .finance-payment-table td[data-label]::before { content: attr(data-label); display: block; font-weight: 600; }
+}

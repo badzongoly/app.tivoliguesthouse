@@ -119,7 +119,7 @@ $edit=null; if (isset($_GET['edit'])) { $id=(int)$_GET['edit']; $edit=$mysqli->q
                       <td><span class="badge <?php echo $r['status']==='occupied'?'bg-danger':'bg-success'; ?>"><?php echo $r['status']; ?></span></td>
                       <td class="text-end">
                         <a class="btn btn-sm btn-outline-light" href="?edit=<?php echo $r['id']; ?>">Edit</a>
-                        <a class="btn btn-sm btn-outline-danger" href="?delete=<?php echo $r['id']; ?>" onclick="return confirm('Delete this room?');">Delete</a>
+                        <a class="btn btn-sm btn-outline-danger" href="?delete=<?php echo $r['id']; ?>" data-confirm="Delete this room?">Delete</a>
                       </td>
                     </tr>
                   <?php endforeach; ?>

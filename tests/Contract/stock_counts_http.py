@@ -33,7 +33,7 @@ staff=Browser();other=Browser();owner=Browser();admin=Browser()
 staff.login(users['sender']['email'],'Synthetic Handover Passphrase 123!');other.login(users['third']['email'],'Synthetic Handover Passphrase 123!');owner.login('admin@example.invalid','Synthetic Admin Passphrase 123!');admin.login(fixture['admin_email'],'Synthetic Stock Passphrase 123!')
 path='/stock-counts.php';new=path+'?page=new'
 check(staff.request(path+'?page=owner')[0]==403,'Staff cannot view owner queue')
-check('Stock Counts & Variance Review' in html.unescape(staff.request('/occupancy.php?section=extras')[2]),'Extras links stock count workspace')
+body=html.unescape(staff.request('/occupancy.php?section=extras')[2]);check(bool(re.search(r'<a[^>]+href="[^"]*stock-counts\.php"[^>]*>Stock Counts</a>',body)),'Extras links stock count workspace')
 data=staff.fields(new,'start')|dict(items=json.dumps([fixture['extra']]),purpose='Weekly Stock Count',comment='PRIVATE-STOCK-'+secrets.token_hex(8))
 check(staff.request(new,data|dict(csrf='invalid'))[0]==403,'Forged count denied by CSRF')
 status,headers,_=staff.request(new,data);check(status==302,'Start count redirects after audited creation')
@@ -54,7 +54,7 @@ check(staff.request(detail+'&form=approve')[0]==403,'Staff cannot load approval 
 check(admin.request(detail+'&form=approve')[0]==403,'Non-owner admin cannot load approval form')
 p=detail+'&form=approve';ap=owner.fields(p,'approve')|dict(decision='Exact differences verified',verified='1',authorized='1')
 check(owner.request(p,ap)[0]==302,'Owner approves exact difference')
-check(owner.request(p,ap)[0]==302,'Identical HTTP retry remains idempotent')
+retry=owner.request(p,ap); check(retry[0]==302,'Identical HTTP retry remains idempotent: '+str(retry[0])+' '+str(re.findall(r'<h2>Action Needs Attention</h2><p>(.*?)</p>',retry[2],re.S)))
 body=owner.request(detail)[2]
 check('Approved' in body and '46.00' in body and 'Approval Snapshot' in body,'Approved evidence and resulting quantity displayed')
 check(owner.request(p)[0]==403,'Final count cannot reopen approval form')

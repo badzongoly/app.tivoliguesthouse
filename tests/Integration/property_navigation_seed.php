@@ -1,0 +1,8 @@
+<?php
+if(PHP_SAPI!=='cli')exit(1);putenv('TIVOLI_TEST_MODE=1');require dirname(__DIR__,2).'/bootstrap/stays.php';
+$a=access_service();$r=$a->repo;if((int)$r->run('SELECT @@port')->fetchColumn()!==3307||$r->run('SELECT DATABASE()')->fetchColumn()!=='tivoli_auth_test'||$r->run('SELECT marker FROM security_test_marker')->fetchColumn()!=='synthetic-auth-only-v1')exit(2);
+$ui=json_decode(file_get_contents(dirname(__DIR__,2).'/.local-setup/weekly-ui-fixture.json'),true);$owner=(int)$r->run("SELECT id FROM users WHERE email='admin@example.invalid'")->fetchColumn();
+$fault=(new \Tivoli\Service\StayService($a))->execute($owner,'fault',['room_id'=>(string)$ui['room'],'priority'=>'Routine','owner'=>'Synthetic property repair','reason'=>'Synthetic property navigation fault'],bin2hex(random_bytes(16)))['fault_id'];
+$email='property-nav-'.bin2hex(random_bytes(5)).'@example.invalid';$r->run("INSERT INTO users(name,email,password_hash,role) VALUES(?,?,?,'clerk')",['Synthetic property reader',$email,password_hash('Synthetic Property Passphrase 123!',PASSWORD_BCRYPT)]);$actor=(int)$r->db->lastInsertId();$r->run('INSERT INTO security_accounts(user_id,must_change_password) VALUES(?,0)',[$actor]);$r->run("INSERT INTO security_user_roles SELECT ?,id FROM security_roles WHERE name='clerk'",[$actor]);
+if((new \Tivoli\Service\WeeklyAuditService($a))->auditor($actor))throw new RuntimeException('Expected unassigned clerk');
+file_put_contents(dirname(__DIR__,2).'/.local-setup/property-navigation-fixture.json',json_encode(['room'=>$ui['room'],'fault'=>$fault,'email'=>$email,'review'=>$ui['ids']['review'],'legacy'=>$ui['legacy']],JSON_THROW_ON_ERROR));echo "PASS Guarded synthetic property navigation fixture prepared\n";

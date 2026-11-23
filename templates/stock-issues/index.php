@@ -1,8 +1,8 @@
 <?php require dirname(__DIR__).'/layouts/start.php'; ?>
-<link rel="stylesheet" href="<?=access_h(access_url('assets/css/stock-issues.css'))?>"><script src="<?=access_h(access_url('assets/js/stock-issues.js'))?>" defer></script>
+<link rel="stylesheet" href="<?=access_h(access_url('assets/css/stock-issues.css'))?>"><script src="<?=access_h(workspace_asset_url('assets/js/stock-issues.js'))?>" defer></script>
 <div class="stock-issues"><header><p class="app-eyebrow">EXTRAS & STOCK</p><h1>Damage, Expiry & Complimentary Use</h1></header>
 <?php require dirname(__DIR__).'/partials/extras-nav.php'; ?>
-<nav class="app-section-nav" aria-label="Stock Issues"><?php si_link('Non-Sale Issues');si_link('Report / Request Issue',['page'=>'new']);?><a href="<?=access_h(access_url('stock-counts.php'))?>">Stock Counts & Variance Review</a></nav>
+<?php if($id||$page==='new'):?><nav class="app-section-nav" aria-label="Stock Issue Actions"><?php si_link('Issue Register');?></nav><?php endif?>
 <?php if($notice):?><p class="notice" id="stockissue-status" role="status" tabindex="-1"><?=access_h($notice)?></p><?php endif?>
 <?php if($error):?><section class="card error" id="stockissue-error" tabindex="-1" role="alert"><h2>Action Needs Attention</h2><p><?=access_h($error)?></p><?php si_link('Reload Current Record',$id?['id'=>$id]:['page'=>$page]);?>
 <?php if(http_response_code()===503&&$_SERVER['REQUEST_METHOD']==='POST'):?><form method="post" enctype="multipart/form-data" id="stockissue-retry" data-confirm="Retry these identical details with the original action key? The same action can commit only once.">

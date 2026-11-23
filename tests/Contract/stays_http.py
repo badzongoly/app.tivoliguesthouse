@@ -67,11 +67,20 @@ check(clerk.request(extra_path,{**clerk.fields(extra_path),'action':'extra','boo
 payment_path=detail+'&form=payment'
 payment={**clerk.fields(payment_path),'action':'payment','booking_id':id,'amount':'1.00','method':'cash','reference':'','name':'Forged Cashier'}
 check(clerk.request(payment_path,payment)[0]==302,'cashier payment posted')
+status_path='/occupancy.php?payment_status='+payment['operation_key']
+status,_,result=clerk.request(status_path)
+saved=json.loads(result)
+check(status==200 and saved['status']=='recorded' and saved['booking_id']==id and saved['receipt']>0,'status recovers the committed receipt without its original response')
+check(json.loads(admin.request(status_path)[2])=={'status':'unconfirmed'},'another staff account cannot look up the operation')
+check(anonymous.request(status_path)[0]==302,'anonymous payment status denied')
+check(clerk.request('/occupancy.php?payment_status=broken')[0]==400,'malformed operation key refused')
+check(clerk.request(payment_path,payment)[0]==302,'same attempted payment safely replays')
+check(json.loads(clerk.request(status_path)[2])==saved,'receipt identity remains exact after retry')
 message=clerk.request(detail)[2]
 check('Payment recorded by Synthetic occupancy cashier.' in message and 'Payment recorded by Forged Cashier.' not in message,'payment confirmation uses authenticated full name')
 check('Synthetic occupancy cashier' in clerk.request(detail+'&tab=payments')[2],'receipt displays cashier full name')
 checkout=f'{detail}&form=checkout';body=clerk.request(checkout)[2]
-check('Clear All Outstanding' in body and '>Confirm Departure<' not in body,'unpaid checkout hides confirmation')
+check('Clear Outstanding Balance' in body and '>Confirm Departure<' not in body,'unpaid checkout hides confirmation')
 check('outstanding-balance handover' not in body,'removed authority field stays absent')
 pay=f'{detail}&form=clear_balance';p={**clerk.fields(pay),'action':'clear_balance','booking_id':id,'method':'cash','reference':''}
 status,h,_=clerk.request('/occupancy.php',p);check(status==302 and 'confirm=' in h.get('Location',''),'full payment first opens confirmation')
@@ -91,10 +100,11 @@ def card(browser):
     match=re.search(r'<article[^>]*data-room-id="'+str(room)+r'"[^>]*>.*?</article>',page,re.S)
     if not match: raise RuntimeError('Synthetic room card missing')
     return match.group(0)
-check('Cleaning Complete' in card(admin),'departed room offers Cleaning Complete on board')
-check('housekeeping.php' in card(clerk),'clerk receives authorized housekeeping action')
+check('Start Cleaning' in card(admin),'departed room offers assigned Start Cleaning on board')
+check('occupancy.php?section=housekeeping' in card(clerk),'clerk receives authorized merged housekeeping action')
 old_clean=f'/occupancy.php?form=clean&room_id={room}'
-check(clerk.request('/occupancy.php',{**clerk.fields(detail),'action':'clean','operation_key':secrets.token_hex(16),'room_id':room})[0]==409,'obsolete immediate cleaning rejected')
+house='/housekeeping.php?room_id='+str(room)
+check(clerk.request('/occupancy.php',{'csrf':house_fields(clerk,house,'start')['csrf'],'action':'clean','operation_key':secrets.token_hex(16),'room_id':room})[0]==409,'obsolete immediate cleaning rejected with valid CSRF')
 check(admin.request(old_clean)[0]==302,'old cleaning URL redirects')
 house='/housekeeping.php?room_id='+str(room)
 status,h,_=clerk.request(house,house_fields(clerk,house,'start'));check(status==302,'staff starts named cleaning attempt')
@@ -124,7 +134,7 @@ check('Inspect &amp; Release Room' in card(admin) and 'form=checkin' not in card
 inspect_path='/housekeeping.php?id='+str(attempt)+'&form=inspect'
 inspection_body=admin.request(inspect_path)[2]
 inspection_checks=re.findall(r'name="result_([^"]+)" value="pass"',inspection_body)
-check(len(inspection_checks)==6 and 'Inspect &amp; Release Room' in inspection_body,'inspection form contains all six owner checks')
+check(len(inspection_checks)==6 and 'name="action" value="inspect"' in inspection_body,'inspection form contains all six captured checks and its protected writer (found '+str(len(inspection_checks))+')')
 check('room has been blocked from sale' in inspection_body and 'Needs Attention' in inspection_body,'inspection retains fault and failed-item evidence')
 inspection_fields=house_fields(admin,inspect_path,'inspect')
 check(admin.request(inspect_path,inspection_fields|dict(results='{}',verified='1',decision='release'))[0]==400,'server rejects incomplete inspection checks')
@@ -143,7 +153,7 @@ for browser in [admin,clerk]:
     directory=browser.request('/occupancy.php?section=folios')[2]
     check('Guest Stay Account' in directory and 'Stay #'+str(id) in directory,'Guest Stay Account directory includes departed stay')
     activity=browser.request('/occupancy.php?section=activity')[2]
-    check('Operational Activity' in activity and 'Cleaning Completed' in activity and 'Housekeeping Inspection Recorded' in activity,'workspace Activity includes cleaning and inspection events')
+    check('Operational Activity' in activity and 'Cleaning Completed' in activity and (browser is not admin or 'Housekeeping Inspection Recorded' in activity),'workspace Activity retains own cleaning and administrator inspection visibility')
     nav=re.search(r'<nav class="app-section-nav" aria-label="Stays">(.*?)</nav>',activity,re.S).group(1)
     check(re.findall(r'>([^<>]+)</a>',nav)==['Room Board','Guest Stay Account','Departure Incidents','Activity'],'single stay navigation has requested tab order')
     check('<th>Check-In (UTC)</th>' in directory and '<th>Check-Out (UTC)</th>' in directory and '<th>Balance</th>' not in directory,'account table has dates and no balance column')
@@ -157,8 +167,8 @@ check('start=2001-01-03&amp;end=2001-01-03' in historical_page and 'Older Guest 
 check('Guest Stay Account' in admin.request('/occupancy.php?tab=recent')[2] and 'Recent Check-Outs' not in admin.request('/occupancy.php?tab=recent')[2],'old recent URL opens unified accounts')
 for tab in ['bill','payments','statement','activity']:
     check(clerk.request(detail+'&tab='+tab)[0]==200,'account section '+tab)
-check(clerk.request('/occupancy.php',{'csrf':clerk.fields(detail)['csrf'],'operation_key':secrets.token_hex(16),'action':'payment','booking_id':id,'amount':'1.00','method':'cash'})[0]==400,'forged post-departure payment rejected')
-check(clerk.request('/occupancy.php',{'csrf':clerk.fields(detail)['csrf'],'operation_key':secrets.token_hex(16),'action':'extra_save','name':'Forbidden','price':'1.00','reason':'Forbidden fixture'})[0]==403,'clerk cannot forge catalogue write')
+check(clerk.request('/occupancy.php',{'csrf':clerk.fields('/auth/change-password.php')['csrf'],'operation_key':secrets.token_hex(16),'action':'payment','booking_id':id,'amount':'1.00','method':'cash'})[0]==400,'forged post-departure payment rejected')
+check(clerk.request('/occupancy.php',{'csrf':clerk.fields('/auth/change-password.php')['csrf'],'operation_key':secrets.token_hex(16),'action':'extra_save','name':'Forbidden','price':'1.00','reason':'Forbidden fixture'})[0]==403,'clerk cannot forge catalogue write')
 status,headers,_=admin.request('/bookings.php?export=csv&room_id='+str(room));check(status==302 and 'export=csv' in headers.get('Location',''),'legacy export routes to authoritative exporter')
 path=headers['Location'].replace(BASE,'');status,headers,body=admin.request(path);check(status==200 and 'text/csv' in headers.get('Content-Type','') and '<html' not in body,'CSV streams without layout markup')
 check('Stay Type' in body and 'Incidentals' in body and 'short' in body,'CSV includes stay type and authoritative incidental totals')
@@ -217,7 +227,7 @@ check('Weekly Checks' not in area_form and '<select name="area_id" required' in 
 today=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
 area_id=re.search(r'<select name="area_id" required[^>]*>.*?<option value="([^"]+)"',area_form,re.S).group(1)
 area_data={**admin.fields(area_path),'action':'area_audit','area_id':area_id,'result':'unsafe'}
-check(clerk.request(area_path,{**area_data,'csrf':clerk.fields('/occupancy.php')['csrf'],'operation_key':secrets.token_hex(16)})[0]==403,'forged clerk area audit denied')
+check(clerk.request(area_path,{**area_data,'csrf':clerk.fields('/auth/change-password.php')['csrf'],'operation_key':secrets.token_hex(16)})[0]==403,'forged clerk area audit denied')
 check(admin.request(area_path,area_data)[0]==302,'weekly area audit records overall result')
 area_register=admin.request('/occupancy.php?section=areas')[2]
 check('Unsafe' in area_register and 'Needs Assignment' in area_register,'unsafe area audit opens visible corrective follow-up')

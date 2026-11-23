@@ -15,7 +15,7 @@ $status=match($departureCase['status']){'pending'=>'Departure Reported — Await
 <?php if($canAuthorizeDeparture):
 if(in_array($departureCase['status'],['pending','disputed'],true))$link('Review Departure',['booking_id'=>$bookingId,'form'=>'review_departure'],'');
 if($departureCase['status']!=='retracted')$link('Record Follow-Up',['booking_id'=>$bookingId,'form'=>'departure_followup']);
-if($departureCase['status']==='confirmed'&&$bill['balance']>0&&!$bill['legacy_unknown'])$link('Recover Outstanding',['booking_id'=>$bookingId,'form'=>'collect_outstanding'],'');
+
 if(!empty($report['data']['attachment'])):?><a class="button secondary" href="<?=access_h(access_url('finance-evidence.php?kind=incident&id='.(int)$report['id']))?>">Download Private Evidence</a><?php endif;endif?>
 </div>
 <details><summary>Incident and Follow-Up History</summary>

@@ -60,13 +60,49 @@ final class HousekeepingService
         }catch(RuntimeException $e){if($e instanceof \PDOException||$e instanceof PermissionDenied)throw $e;$view=['facts'=>null,'latest'=>0,'token'=>''];$current=false;$valid=false;}
         return $c+['room'=>$view,'current'=>$current,'valid'=>(bool)$valid];
     }
+
+    /** Read-only Room Board projection; all writes still use the guarded service. */
+    public function roomSummaries(int $actor,array $rooms):array{
+        $this->permit($actor);$r=$this->access->repo;$latest=[];
+        $roots=$r->run("SELECT e.id,e.actor_id,e.payload FROM finance_events e JOIN (SELECT MAX(id) id FROM finance_events WHERE target_type='housekeeping' AND kind='hk_started' GROUP BY JSON_UNQUOTE(JSON_EXTRACT(payload,'$.room_id'))) last_attempt ON last_attempt.id=e.id")->fetchAll();
+        $ids=[];foreach($roots as $row){$d=json_decode($row['payload'],true,512,JSON_THROW_ON_ERROR);$latest[(int)$d['room_id']]=['id'=>(int)$row['id'],'actor'=>(int)$row['actor_id'],'cycle'=>$d['cycle'],'status'=>'cleaning'];$ids[]=(string)$row['id'];}
+        $states=[];
+        if($ids){$marks=implode(',',array_fill(0,count($ids),'?'));foreach($r->run("SELECT target_id,kind,payload FROM finance_events WHERE target_type='housekeeping' AND target_id IN ($marks) AND kind IN ('hk_completed','hk_inspected','hk_superseded') ORDER BY id",$ids)->fetchAll() as $row){$d=json_decode($row['payload'],true,512,JSON_THROW_ON_ERROR);$states[$row['target_id']]=match($row['kind']){'hk_completed'=>'inspection','hk_inspected'=>$d['decision']==='release'?'released':'returned',default=>'superseded'};}}
+        $out=[];foreach($rooms as $room){$id=(int)$room['id'];$a=$latest[$id]??null;if($a)$a['status']=$states[(string)$a['id']]??'cleaning';
+            $blocked=!empty($room['blocked'])||$room['status']==='maintenance'||$room['ready_state']==='blocked';
+            $state=!empty($room['booking_id'])?'occupied':($blocked?'blocked':($room['ready_state']==='ready'?'ready':($room['ready_state']==='awaiting_inspection'?'inspection':($a&&$a['status']==='cleaning'?'cleaning':'needs_cleaning'))));
+            if($a&&in_array($state,['cleaning','inspection'],true)&&!hash_equals($a['cycle'],(new StayService($this->access,$this->now()))->housekeepingRoom($id)['cycle']))$state='needs_cleaning';
+            $action=null;$form='';
+            if($state==='needs_cleaning')$action='Start Cleaning';
+            elseif($state==='cleaning'){$action=$a&&$a['actor']===$actor?'Continue Cleaning':'View Cleaning';$form=$a&&$a['actor']===$actor?'clean':'';}
+            elseif($state==='inspection'){$action=$a&&$a['actor']!==$actor?'Inspect & Release Room':'Review Inspection';$form=$a&&$a['actor']!==$actor?'inspect':'';}
+            $out[$id]=['state'=>$state,'attempt_id'=>$a['id']??0,'action'=>$action,'form'=>$form];
+        }return $out;
+    }
+    /** Only explicit new links are used. Never substitute the room's latest guest. */
+    public function preparationForStay(int $actor,int $booking):?array{
+        $this->access->requirePrivilege($actor,'bookings.manage');
+        $row=$this->access->repo->run("SELECT id FROM finance_events WHERE kind='hk_started' AND target_type='housekeeping' AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.source_booking_id'))=? ORDER BY id DESC LIMIT 1",[(string)$booking])->fetchColumn();
+        if(!$row)return null;$c=$this->load($actor,(int)$row);
+        return ['id'=>(int)$row,'status'=>$c['status'],'room_id'=>(int)$c['root']['data']['room_id']];
+    }
+    private function sourceBooking(int $room,?array $previous):?int{
+        $b=$this->access->repo->run('SELECT b.id,b.status,d.departed_at FROM bookings b LEFT JOIN stay_departures d ON d.booking_id=b.id WHERE b.room_id=? ORDER BY b.checkin_at DESC,b.id DESC LIMIT 1',[$room])->fetch();
+        if(!$b||$b['status']!=='checked_out'||!$b['departed_at'])return null;
+        if($previous){$linked=$previous['root']['data']['source_booking_id']??null;
+            if((int)$linked===(int)$b['id'])return $previous['status']==='released'?null:(int)$b['id'];
+            if(!$linked&&$previous['root']['created_at']>=$b['departed_at'])return null;
+        }return (int)$b['id'];
+    }
+
     public function board(int $actor,int $before=0):array{
         $this->permit($actor);$ids=$this->access->repo->run('SELECT id FROM rooms'.($before?' WHERE id<?':'').' ORDER BY id DESC LIMIT 51',$before?[$before]:[])->fetchAll(\PDO::FETCH_COLUMN);$more=count($ids)>50;if($more)array_pop($ids);$rows=[];
         foreach($ids as $id){$room=$this->room($actor,(int)$id);$room['attempt']=$room['latest']?$this->detail($actor,$room['latest']):null;$rows[]=$room;}
         return ['rows'=>$rows,'next'=>$more?(int)end($ids):0];
     }
     public function history(int $actor,int $before=0):array{
-        $this->permit($actor);$ids=$this->access->repo->run("SELECT id FROM finance_events WHERE target_type='housekeeping' AND kind='hk_started'".($before?' AND id<?':'').' ORDER BY id DESC LIMIT 51',$before?[$before]:[])->fetchAll(\PDO::FETCH_COLUMN);$more=count($ids)>50;if($more)array_pop($ids);
+        $this->permit($actor);$allActors=$this->access->repo->isAdmin($actor);$scope=$allActors?'':' AND actor_id=?';$params=$allActors?[]:[$actor];if($before)$params[]=$before;
+        $ids=$this->access->repo->run("SELECT id FROM finance_events WHERE target_type='housekeeping' AND kind='hk_started'".$scope.($before?' AND id<?':'').' ORDER BY id DESC LIMIT 51',$params)->fetchAll(\PDO::FETCH_COLUMN);$more=count($ids)>50;if($more)array_pop($ids);
         return ['rows'=>array_map(fn($id)=>$this->detail($actor,(int)$id),$ids),'next'=>$more?(int)end($ids):0];
     }
     public function attention(int $actor):array{
@@ -116,7 +152,7 @@ final class HousekeepingService
         if($previous&&in_array($previous['status'],['cleaning','inspection'],true))$this->event($actor,'hk_superseded',['reason'=>$restart?R::text($in['reason']??'',2000,true):'Room cycle or safety facts changed'],(int)$previous['root']['id']);
         $this->access->repo->run("INSERT IGNORE INTO stay_room_settings(room_id) VALUES(?)",[$room]);
         $this->access->repo->run("UPDATE rooms SET status='dirty' WHERE id=?",[$room]);$this->access->repo->run("UPDATE stay_room_settings SET ready_state='cleaning' WHERE room_id=?",[$room]);
-        $id=$this->event($actor,'hk_started',['room_id'=>$room,'room_name'=>$f['name'],'cycle'=>$f['cycle'],'cleaning'=>CleaningChecklist::current($this->access->repo),'inspection'=>CleaningChecklist::current($this->access->repo,'inspection'),'previous_id'=>$view['latest']?:null,'restart_reason'=>$restart?R::text($in['reason']??'',2000,true):'']);return [$id,$id];
+        $id=$this->event($actor,'hk_started',['room_id'=>$room,'room_name'=>$f['name'],'source_booking_id'=>$this->sourceBooking($room,$previous),'cycle'=>$f['cycle'],'cleaning'=>CleaningChecklist::current($this->access->repo),'inspection'=>CleaningChecklist::current($this->access->repo,'inspection'),'previous_id'=>$view['latest']?:null,'restart_reason'=>$restart?R::text($in['reason']??'',2000,true):'']);return [$id,$id];
     }
     private function command(int $actor,string $action,array $in):array{
         if($action==='start')return $this->start($actor,$this->id($in['room_id']??''),$in);

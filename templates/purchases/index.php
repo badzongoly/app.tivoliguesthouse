@@ -1,8 +1,8 @@
 <?php use Tivoli\Domain\Stay\StayRules as R;$layoutTitle='Purchase & Expense Requests';require dirname(__DIR__).'/layouts/start.php';?>
-<link rel="stylesheet" href="<?=access_h(access_url('assets/css/purchases.css'))?>"><script src="<?=access_h(access_url('assets/js/purchases.js'))?>" defer></script>
+<link rel="stylesheet" href="<?=access_h(access_url('assets/css/purchases.css'))?>"><script src="<?=access_h(workspace_asset_url('assets/js/purchases.js'))?>" defer></script>
 <div class="purchases"><header><p class="eyebrow">FINANCE &amp; CASH / PURCHASING</p><h1>Purchase &amp; Expense Requests</h1><p>Approval, delivery, cost and payment stay linked. All times are UTC.</p></header>
 <?php require dirname(__DIR__).'/finance/navigation.php';?>
-<nav class="pu-tabs" aria-label="Purchase Sections"><?php foreach($pages as $pg=>$label):if($pg==='owner'&&!$owner)continue;?><a href="<?=access_h(pur_url(['page'=>$pg]))?>#purchase-content" <?=$page===$pg&&!$id?'aria-current="page"':''?>><?=access_h($label)?></a><?php endforeach?></nav>
+<nav class="pu-tabs" aria-label="Purchase Sections"><?php foreach($pages as $pg=>$label):if($pg==='owner'&&!$owner)continue;?><a href="<?=access_h(pur_url(['page'=>$pg]))?>#purchase-content" <?=$page===$pg&&!$id?'aria-current="page"':''?>><?=access_h($label)?></a><?php endforeach?><?php if($financeNavAdmin||array_intersect(['bookings.manage','expenses.submit','expenses.manage'],$financeNavPermissions)):?><a href="<?=access_h(access_url('finance.php?page=providers'))?>">Legacy Provider Records</a><?php endif?></nav>
 <?php if($notice):?><p class="notice" id="purchase-status" role="status" tabindex="-1"><?=access_h($notice)?></p><?php endif?>
 <?php if($error):?><section class="card error" role="alert" id="purchase-error" tabindex="-1"><h2>Action Needs Attention</h2><p><?=access_h($error)?></p><a href="<?=access_h(pur_url($id?['id'=>$id]:['page'=>$page]))?>#purchase-content">Reload Current Record</a><?php if($_SERVER['REQUEST_METHOD']==='POST'&&http_response_code()===503):?>
 <form method="post" enctype="multipart/form-data" data-confirm="Retry these same details? The operation can only commit once.">
@@ -38,7 +38,17 @@
 <?php if($case['change']):?><p class="pu-note">Revised Limit Requested · <?=access_h(pur_money($case['change']['limit']))?> · <?=access_h($case['change']['reason'])?></p><?php endif?>
 <?php if($case['commitment']):?><p class="pu-note">Committed <?=access_h(pur_money($case['commitment']['amount']))?> at <?=access_h(display_date($case['commitment']['committed_at']))?> UTC. No payment is implied.</p><?php endif?>
 <div class="pu-actions"><?php if($owner&&in_array($case['status'],['pending','change'],true))pur_link('Review Spending Approval','approve',$case,true);if($requester&&$case['status']==='approved'){pur_link('Record Commitment','commit',$case,true);pur_link('Request Revised Approval','amend',$case);}if($requester&&$case['status']==='committed')pur_link('Record Delivery & Cost','receive',$case,true);if($requester&&in_array($case['status'],['pending','approved'],true))pur_link('Cancel Request','cancel',$case);?></div>
-<?php if($case['status']==='pending'):?><p>Awaiting Eugene’s approval before committing or spending.</p><?php endif?></section>
+<?php $purchaseNext = match($case['status']){
+    'pending','change'=>'Owner: review spending approval before anyone commits or spends.',
+    'approved'=>'Requester: record commitment when placing the order.',
+    'committed'=>'Requester: record the delivery and actual cost.',
+    'declared','exception'=>'Owner: review the delivery and actual cost.',
+    'disputed'=>'Requester: provide the requested clarification.',
+    'posted'=>empty($case['settlement_blockers'])&&($case['receipt']['cost']??0)>$case['paid']
+        ? 'Owner: record completed settlement against this purchase.'
+        : '',
+    default=>'',
+}; if($purchaseNext!==''):?><p><strong>Next Step</strong> <?=access_h($purchaseNext)?></p><?php endif?></section>
 <?php elseif($tab==='delivery'):?>
 <section class="card"><h2>Delivery & Actual Cost</h2><?php if($receipt):?><p><strong><?=access_h(pur_money($receipt['cost']))?></strong> · Delivered <?=access_h(display_date($receipt['delivered_at']))?> UTC</p><p class="pu-prose"><?=access_h($receipt['description'])?></p><p><?=access_h($receipt['missing_evidence'])?></p><?php pur_file($receipt['event_id']);if($receipt['payment']&&!$case['expense_id']):?><p class="pu-note">Already-Paid Declaration · <?=access_h(pur_money($receipt['payment']['amount']).' · '.$receipt['payment']['payer_name'])?> · Awaiting Owner Verification. Do not pay again.</p><?php endif?>
 <?php if($case['expense_id']):?><p class="pu-note">Expense #<?=(int)$case['expense_id']?> · One Recorded Cost<?php if($case['stock_movement_id']):?> · Stock Movement #<?=(int)$case['stock_movement_id']?><?php endif?></p><?php endif?>

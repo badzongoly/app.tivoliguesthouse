@@ -1,5 +1,5 @@
 'use strict';
-document.querySelectorAll('.corrections form[data-confirm]').forEach(form=>form.addEventListener('submit',event=>{if(!window.confirm(form.dataset.confirm))event.preventDefault();}));
+
 const ccForm=document.getElementById('cc-request');
 if(ccForm){
  const parse=v=>{if(!/^\d{1,10}(\.\d{1,2})?$/.test(v))throw Error('Enter a valid amount with up to two decimal places.');const p=v.split('.');return BigInt(p[0])*100n+BigInt((p[1]||'').padEnd(2,'0'));};

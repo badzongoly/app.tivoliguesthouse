@@ -1,6 +1,6 @@
 <?php require dirname(__DIR__).'/layouts/start.php'; ?>
 <link rel="stylesheet" href="<?=access_h(access_url('assets/css/payroll.css'))?>">
-<script src="<?=access_h(access_url('assets/js/payroll.js'))?>" defer></script>
+<script src="<?=access_h(workspace_asset_url('assets/js/payroll.js'))?>" defer></script>
 <div class="payroll"><header class="app-page-heading-row"><div><p class="app-eyebrow">STAFF & HR</p><h1><?=$owner?'Payroll & Staff Payments':'My Payslips'?></h1><p><?=$owner?'Prepare, approve and record completed staff payments.':'Your published monthly statements.'?></p></div></header>
 <?php if($owner):?><nav class="app-section-nav" aria-label="Payroll"><?php foreach(['register'=>'Monthly Payroll','owner'=>'Owner Review','costs'=>'Staff Costs','corrections'=>'Corrections','activity'=>'Activity'] as $nav=>$label):?><a href="<?=access_h(p_url(['page'=>$nav]))?>" <?=$page===$nav&&!$id?'aria-current="page"':''?>><?=access_h($label)?></a><?php endforeach?><a href="<?=access_h(access_url('finance.php?page=payroll'))?>">Legacy Payroll</a><a href="<?=access_h(access_url('finance.php?page=payments'))?>">Payment Log</a></nav><?php endif?>
 <?php if($notice):?><p role="status" class="card" tabindex="-1" id="payroll-status"><?=access_h($notice)?></p><?php endif?>
@@ -9,8 +9,17 @@
 <div id="payroll-action" tabindex="-1">
 <?php if(!in_array(http_response_code(),[403,503],true)):?>
 <?php if($statement):require __DIR__.'/statement.php';
-elseif($case):$p=$case['approved']??$case['prepared'];$salary=$case['current_salary'];$root=$case['root']['data']; ?>
-<section class="card"><h2><?=access_h(($p??$root['salary'])['staff_name'])?> · <?=access_h($root['period'])?></h2><p>Payroll #<?=(int)$case['root']['id']?> · <?=access_h(ucfirst($case['status']))?><?=$case['published_current']?' · Published':($case['published']?' · Revised Statement Pending':'')?></p>
+elseif($case):$p=$case['approved']??$case['prepared'];$salary=$case['current_salary'];$root=$case['root']['data'];
+$payrollNextAction = match(true) {
+    !empty($case['source_errors']) => 'Owner: review linked records before continuing.',
+    $case['status']==='draft' || $case['status']==='revision' => 'Owner: prepare the pay details.',
+    $case['status']==='review' => 'Owner: review and approve the prepared payroll.',
+    $case['due']>0 => 'Owner: complete the transfer and record the payment.',
+    $case['recovery_due']>0 => 'Owner: review the outstanding overpayment.',
+    !$case['published_current'] => 'Owner: publish the updated statement.',
+    default => 'The current statement is published.',
+}; ?>
+<section class="card"><p><strong>Next Step</strong> <?=access_h($payrollNextAction)?></p><h2><?=access_h(($p??$root['salary'])['staff_name'])?> · <?=access_h($root['period'])?></h2><p>Payroll #<?=(int)$case['root']['id']?> · <?=access_h(ucfirst($case['status']))?><?=$case['published_current']?' · Published':($case['published']?' · Revised Statement Pending':'')?></p>
 <?php if($p):?><dl class="payroll-totals"><?php foreach(['base'=>'Base Salary','allowance'=>'Allowances','overtime'=>'Overtime','gross'=>'Gross Pay','deductions'=>'Deductions','net'=>'Employee Net Pay','employer'=>'Employer Costs','cost'=>'Total Staff Cost'] as $n=>$label):?><div><dt><?=access_h($label)?></dt><dd><?=access_h(p_money($p[$n]))?></dd></div><?php endforeach?></dl><p>Payee: <?=access_h($p['payee'])?> · <?=access_h($p['wallet'])?> · Salary Revision #<?=(int)$p['revision']?></p><?php if($p['adjustment']):?><p><?=access_h($p['adjustment'])?></p><?php endif?><?php endif?>
 <?php foreach($case['source_errors'] as $sourceError):?><p class="error"><?=access_h($sourceError)?></p><?php endforeach?>
 <?php if($case['approved']):?><p>Paid <?=access_h(p_money($case['paid']))?> · Employee Balance <?=access_h(p_money($case['due']))?> · Private Recovery Due <?=access_h(p_money($case['recovery_due']))?></p><p><?=$case['corrections']?'Original Approval':'Approved'?> <?=access_h(display_date($case['approved']['approved_at']))?> UTC by <?=access_h($case['approved']['approved_by'])?>. Cost is recorded once on approval.</p><?php if($case['corrections']):?><p>Original Staff Cost <?=access_h(p_money($case['original_approved']['cost']))?> · Original Net Pay <?=access_h(p_money($case['original_approved']['net']))?>. Current figures include separately dated linked corrections; the original approval is unchanged.</p><?php endif?><?php p_link('Statement Preview',['page'=>'statement','id'=>$id]);if(!$case['source_errors'])p_link('Correct Payroll',['id'=>$id,'form'=>'correct']);?><?php endif?></section>

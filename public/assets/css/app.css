@@ -20,3 +20,19 @@
 
 /* Mobile reminder access remains in navigation and the account menu. */
 @media(max-width:599px){.app-page .app-topbar .app-reminders-link{display:none}}
+
+.app-file-preview { min-width: 0; overflow-wrap: anywhere; padding-block: .25rem; }
+.app-file-preview img { display: block; max-width: min(100%, 16rem); max-height: 12rem; object-fit: contain; }
+.app-file-preview[hidden], .app-file-preview img[hidden] { display: none !important; }
+
+.app-shift-actions .btn { min-height: 44px; display: inline-flex; align-items: center; }
+.app-shift-actions .btn-outline-primary {
+    --bs-btn-color: var(--app-green);
+    --bs-btn-border-color: #96a79b;
+    --bs-btn-hover-bg: var(--app-green);
+    --bs-btn-hover-border-color: var(--app-green);
+}
+@media (max-width: 599px) {
+    .app-page .app-account .app-account-name { display: block; max-width: clamp(42px, 17vw, 92px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .app-page .app-account .app-account-name small { display: none; }
+}

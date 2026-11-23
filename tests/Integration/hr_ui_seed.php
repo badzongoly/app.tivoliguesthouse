@@ -1,0 +1,10 @@
+<?php
+require __DIR__.'/hr_ux_guard.php';
+$a=access_service();$hr=hr_service();$tag=bin2hex(random_bytes(5));$actor=(int)$repo->run("SELECT id FROM users WHERE email='admin@example.invalid'")->fetchColumn();
+function input(int $id,array $extra=[]):array{global $repo;return [...['id'=>(string)$id,'version'=>$id?(string)$repo->run('SELECT version FROM hr_staff WHERE id=?',[$id])->fetchColumn():'0','reason'=>'Synthetic HR navigation verification','operation_key'=>bin2hex(random_bytes(16)),'current_password'=>'Synthetic Admin Passphrase 123!'],...$extra];}
+$profile=['name'=>'Synthetic HR navigation '.$tag,'email'=>'hr-ux-'.$tag.'@example.invalid','job'=>'Reception','start'=>'2026-11-09','contract'=>'1','identity'=>'1','sop'=>'1'];
+$ids=[];foreach(['draft','active','suspended','exited','exit_scheduled'] as $state){$id=$hr->command($actor,'create',input(0,[...$profile,'email'=>$state.'-'.$profile['email']]));if($state!=='draft')$hr->command($actor,'activate',input($id));if($state==='suspended')$hr->command($actor,'suspend',input($id));if(in_array($state,['exited','exit_scheduled'],true))$hr->command($actor,'offboard',input($id,['exit_date'=>gmdate('Y-m-d',time()+($state==='exit_scheduled'?86400:0)),'reason_html'=>'<p>Synthetic HR navigation exit.</p>']));$ids[$state]=$id;}
+$email='self-'.$profile['email'];$password='Synthetic HR Navigation Passphrase 123!';$a->manage($actor,'Synthetic Admin Passphrase 123!','save_user',['id'=>'0','name'=>'Synthetic HR own-profile viewer','email'=>$email,'password'=>$password,'reason'=>'Synthetic HR navigation account']);$clerk=(int)$repo->run('SELECT id FROM users WHERE email=?',[$email])->fetchColumn();$a->changePassword($clerk,$password,$password.' Changed');
+$hr->command($actor,'link_user',input($ids['active'],['user_id'=>(string)$clerk,'link_confirm'=>'1']));
+file_put_contents(dirname(__DIR__,2).'/.local-setup/hr-ux-fixture.json',json_encode(['ids'=>$ids,'email'=>$email,'password'=>$password.' Changed'],JSON_THROW_ON_ERROR));
+echo "PASS guarded synthetic HR presentation fixtures created\n";

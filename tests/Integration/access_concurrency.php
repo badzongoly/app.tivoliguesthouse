@@ -18,11 +18,12 @@ if(count(array_filter($outcomes,fn($value)=>$value==='ok'))!==1){throw new Runti
 $r->run('UPDATE users SET password_hash=? WHERE id=?',[password_hash($password,PASSWORD_BCRYPT,['cost'=>12]),$ids[0]]);
 $role=(int)$r->run("SELECT id FROM security_roles WHERE name='admin'")->fetchColumn();
 foreach($ids as $id){$s->manage(1,$adminPass,'assign_roles',['id'=>$id,'ids'=>[(string)$role],'reason'=>'Concurrent administrator setup']);}
-$r->run('UPDATE security_accounts SET active=0 WHERE user_id=1');
+$otherAdmins=$r->run("SELECT a.user_id,a.active FROM security_accounts a JOIN security_user_roles ur ON ur.user_id=a.user_id JOIN security_roles r ON r.id=ur.role_id WHERE r.name='admin' AND a.user_id NOT IN (?,?)",$ids)->fetchAll();
+foreach($otherAdmins as $account)$r->run('UPDATE security_accounts SET active=0 WHERE user_id=?',[$account['user_id']]);
 try {
  $outcomes=race(['operation'=>'deactivate','actor'=>$ids[0],'target'=>$ids[1]],['operation'=>'deactivate','actor'=>$ids[1],'target'=>$ids[0]]);
  $active=(int)$r->run("SELECT COUNT(*) FROM security_accounts a JOIN security_user_roles ur ON ur.user_id=a.user_id JOIN security_roles r ON r.id=ur.role_id WHERE a.active=1 AND r.name='admin'")->fetchColumn();
  if(count(array_filter($outcomes,fn($value)=>$value==='ok'))!==1 || $active!==1){throw new RuntimeException('Concurrent administrators did not preserve a single active administrator');}
  echo "PASS competing administrator deactivations preserve an active administrator\n";
-} finally {$r->run('UPDATE security_accounts SET active=1 WHERE user_id=1');foreach($ids as $id){$r->run('UPDATE security_accounts SET active=0 WHERE user_id=?',[$id]);}}
+} finally {foreach($otherAdmins as $account)$r->run('UPDATE security_accounts SET active=? WHERE user_id=?',[$account['active'],$account['user_id']]);foreach($ids as $id){$r->run('UPDATE security_accounts SET active=0 WHERE user_id=?',[$id]);}}
 echo "TOTAL 2 concurrency scenarios passed using independent processes and deterministic barriers.\n";

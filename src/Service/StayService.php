@@ -128,19 +128,26 @@ final class StayService
                 if(!in_array($action,['room_audit','area_audit'],true))$this->access->requirePrivilege($actor,$capability);
                 if($action==='refund'&&!(new FinanceService($this->access,$this->now()))->canPostLate($actor))throw new \Tivoli\Security\PermissionDenied('Only the configured finance owner records guest refunds.');
                 $prior=$this->repo->run('SELECT * FROM stay_operations WHERE actor_id=? AND operation_key=?',[$actor,$operationKey])->fetch();
-                if ($prior) { if (!hash_equals($prior['fingerprint'],$fingerprint)) { throw new RuntimeException('This form was already used with different details.'); } return json_decode($prior['result_json'],true,512,JSON_THROW_ON_ERROR); }
+                if ($prior) { if (!hash_equals($prior['fingerprint'],$fingerprint)) { throw new RuntimeException('This form was already used with different details.'); } return self::operationResult(json_decode($prior['result_json'],true,512,JSON_THROW_ON_ERROR)); }
                 $postedAt=$this->now();
                 if(in_array($action,['checkin','payment','clear_balance','extra','checkout','review_incidental','refund','recover_receipt'],true))FinanceService::guardSource($this->access,substr($postedAt,0,10));
                 $result=$this->command($actor,$action,$input,$postedAt);
                 $areaAction=in_array($action,['area_audit','area_followup'],true);$this->access->audit($actor,'stay.'.$action,$areaAction?'area_audit':'booking',$areaAction?$result['audit']['audit_key']:(isset($result['booking_id'])?(string)$result['booking_id']:null),'succeeded',$result['audit'] ?? []);
                 if(in_array($action,['room_audit','area_audit'],true))$result['followup_id']=(new WeeklyAuditService($this->access,$this->now()))->capture($actor,$action==='room_audit'?'room':'area',$action==='room_audit'?(string)$result['audit']['room_audit_id']:$result['audit']['audit_key'],$input);
                 $this->repo->run('INSERT INTO stay_operations(actor_id,operation_key,fingerprint,result_json) VALUES(?,?,?,?)',[$actor,$operationKey,$fingerprint,json_encode($result,JSON_THROW_ON_ERROR)]);
-                unset($result['audit']);return $result;
+                return self::operationResult($result);
             });
         } catch(Throwable $error) {
             $this->access->audit($actor,'stay.action_failed','booking',isset($input['booking_id'])?(string)(int)$input['booking_id']:null,'denied',['action'=>$action,'reason'=>'permission_validation_state_or_storage_failure']);throw $error;
         }
     }
+    private static function operationResult(array $result): array
+    {
+        if (empty($result['audit']['refund_id']) && !empty($result['audit']['payment_id'])) $result['payment_id'] = (int)$result['audit']['payment_id'];
+        unset($result['audit']);
+        return $result;
+    }
+
     public function installed(): void { if(!$this->repo->run("SELECT 1 FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='stay_schema'")->fetchColumn() || !$this->repo->run('SELECT version FROM stay_schema WHERE version=2')->fetchColumn())throw new RuntimeException('Occupancy setup must complete before this module can be used.'); }
     private function command(int $actor,string $action,array $in,string $postedAt): array
     {
@@ -189,7 +196,9 @@ final class StayService
         }
         if ($action==='checkin') {
             $room=$this->row('rooms',(int)($in['room_id'] ?? 0));$setting=$this->settings((int)$room['id']);$this->roomUnused((int)$room['id']);
-            if ($room['status']!=='vacant' || $setting['ready_state']!=='ready' || $this->blocked((int)$room['id'])) { throw new RuntimeException('The room must be inspected and ready before check-in.'); }
+            $room = $room + $setting;
+            $room['blocked'] = $this->blocked((int)$room['id']);
+            if (!self::physicallyReady($room)) { throw new RuntimeException('The room must be inspected and ready before check-in.'); }
             $name=R::text($in['guest_name'] ?? '',120,true);$phone=R::text($in['phone'] ?? '',60,true);$gender=$in['gender'] ?? '';$type=$in['stay_type'] ?? '';
             if (!in_array($gender,['Male','Female','Other','Prefer not to say'],true) || !in_array($type,['overnight','short'],true)) { throw new RuntimeException('Choose gender and stay type.'); }
             $nationality=R::text($in['nationality'] ?? '',80,true);
@@ -197,7 +206,7 @@ final class StayService
             if (!in_array($nationality,$countries,true)) { throw new RuntimeException('Choose nationality from the list.'); }
             $method=$this->method(['method'=>$in['payment_type']??'']);
             $rate=$type==='short'?$setting['short_rate']:$room['rate'];
-            if (R::minor((string)$rate)<=0 || ($type==='short' && !$setting['short_enabled'])) { throw new RuntimeException('This stay type needs an approved positive room rate.'); }
+            if (!self::checkInReady($room,$type)) { throw new RuntimeException('This stay type needs an approved positive room rate.'); }
             $amount=R::minor(R::text($in['amount']??'',30,true));
             if($amount<R::minor((string)$rate)||$amount>999999999999)throw new RuntimeException('Record at least the first accommodation charge received, within the supported amount limit.');
             if(R::minor(R::text($in['expected_rate']??'',30,true))!==R::minor((string)$rate))throw new RuntimeException('The room rate changed. Review the current rate and received amount before checking in.');
@@ -427,16 +436,55 @@ final class StayService
     {
         $this->access->requirePrivilege($actor,'bookings.manage');$this->installed();
         if($before<0)throw new RuntimeException('Invalid activity cursor.');
-        $rows=$this->repo->run("SELECT a.id,a.actor_id,u.name actor_name,a.action,a.target_type,a.target_id,a.outcome,a.occurred_at created_at,a.details payload FROM security_audit a LEFT JOIN users u ON u.id=a.actor_id WHERE (a.action LIKE 'stay.%' OR a.action IN ('housekeeping.start','housekeeping.progress','housekeeping.completed','housekeeping.inspect','housekeeping.request_exception','housekeeping.decide_exception','housekeeping.followup','housekeeping.restart','housekeeping.failed')) AND a.action NOT IN ('stay.viewed','stay.folios_viewed','stay.activity_viewed','stay.area_audits_viewed','stay.departure_cases_viewed')".($before?' AND a.id<?':'').' ORDER BY a.id DESC LIMIT 51',$before?[$before]:[])->fetchAll();
+        $allActors=$this->repo->isAdmin($actor);$scope=$allActors?'':' AND a.actor_id=?';$params=$allActors?[]:[$actor];if($before)$params[]=$before;
+        $rows=$this->repo->run("SELECT a.id,a.actor_id,u.name actor_name,a.action,a.target_type,a.target_id,a.outcome,a.occurred_at created_at,a.details payload FROM security_audit a LEFT JOIN users u ON u.id=a.actor_id WHERE (a.action LIKE 'stay.%' OR a.action IN ('housekeeping.start','housekeeping.progress','housekeeping.completed','housekeeping.inspect','housekeeping.request_exception','housekeeping.decide_exception','housekeeping.followup','housekeeping.restart','housekeeping.failed')) AND a.action NOT IN ('stay.viewed','stay.folios_viewed','stay.activity_viewed','stay.area_audits_viewed','stay.departure_cases_viewed')".$scope.($before?' AND a.id<?':'').' ORDER BY a.id DESC LIMIT 51',$params)->fetchAll();
         $more=count($rows)>50;if($more)array_pop($rows);
         $this->access->audit($actor,'stay.activity_viewed','booking',null,'succeeded',['rows'=>count($rows),'before'=>$before]);
         return ['rows'=>$rows,'next_before'=>$more?(int)$rows[count($rows)-1]['id']:null];
     }
+    public static function physicallyReady(array $room): bool
+    {
+        return strcasecmp((string)$room['type'], 'Service') !== 0
+            && $room['status'] === 'vacant' && $room['ready_state'] === 'ready'
+            && empty($room['booking_id']) && empty($room['blocked']);
+    }
+
+    private static function hasPositiveRate(mixed $rate): bool
+    {
+        try {
+            return R::minor((string)$rate) > 0;
+        } catch (RuntimeException $invalidRate) {
+            return false;
+        }
+    }
+
+    public static function checkInReady(array $room, ?string $stayType = null): bool
+    {
+        if (!self::physicallyReady($room)) return false;
+        $overnight = $stayType !== 'short' && self::hasPositiveRate($room['rate'] ?? null);
+        $short = $stayType !== 'overnight' && !empty($room['short_enabled'])
+            && self::hasPositiveRate($room['short_rate'] ?? null);
+        return $overnight || $short;
+    }
+
+    public function roomBoard(int $actor): array
+    {
+        $this->access->requirePrivilege($actor, 'bookings.manage');
+        $this->installed();
+        $rooms=$this->repo->run("SELECT r.*,COALESCE(s.short_rate,'0.00') short_rate,COALESCE(s.short_enabled,0) short_enabled,COALESCE(s.ready_state,'unverified') ready_state,b.id booking_id,b.guest_name,COALESCE(d.stay_type,'overnight') stay_type,d.due_at,EXISTS(SELECT 1 FROM stay_faults f WHERE f.room_id=r.id AND f.priority='Critical' AND f.status<>'closed') blocked FROM rooms r LEFT JOIN stay_room_settings s ON s.room_id=r.id LEFT JOIN bookings b ON b.room_id=r.id AND b.status='active'".$this->occupancyCondition()." LEFT JOIN stay_details d ON d.booking_id=b.id ORDER BY r.name")->fetchAll();
+        foreach ($rooms as &$room) {
+            if (self::physicallyReady($room)) {
+                $room['blocked'] = $this->incidentRoomHeld((int)$room['id']);
+            }
+        }
+        unset($room);
+        return $rooms;
+    }
+
     public function snapshot(int $actor,int $bookingId=0): array
     {
         $this->access->requirePrivilege($actor,'bookings.manage');
-        $this->installed();
-        $rooms=$this->repo->run("SELECT r.*,COALESCE(s.short_rate,'0.00') short_rate,COALESCE(s.short_enabled,0) short_enabled,COALESCE(s.ready_state,'unverified') ready_state,b.id booking_id,b.guest_name,COALESCE(d.stay_type,'overnight') stay_type,d.due_at,EXISTS(SELECT 1 FROM stay_faults f WHERE f.room_id=r.id AND f.priority='Critical' AND f.status<>'closed') blocked FROM rooms r LEFT JOIN stay_room_settings s ON s.room_id=r.id LEFT JOIN bookings b ON b.room_id=r.id AND b.status='active'".$this->occupancyCondition()." LEFT JOIN stay_details d ON d.booking_id=b.id ORDER BY r.name")->fetchAll();
+        $rooms=$this->roomBoard($actor);
         $data=['rooms'=>$rooms,'recent'=>$this->repo->run("SELECT b.*,r.name room_name,COALESCE(d.stay_type,'overnight') stay_type FROM bookings b JOIN rooms r ON r.id=b.room_id LEFT JOIN stay_details d ON d.booking_id=b.id WHERE b.status='checked_out' ORDER BY b.checkout_at DESC,b.id DESC LIMIT 100")->fetchAll(),'extras'=>$this->repo->run("SELECT e.*,COALESCE(m.category,'General') category,COALESCE(m.tracked,1) tracked,COALESCE(m.low_stock,0) low_stock,(m.extra_id IS NOT NULL) configured FROM extras e LEFT JOIN stay_extra_settings m ON m.extra_id=e.id ORDER BY e.active DESC,e.name")->fetchAll(),'faults'=>$this->repo->run('SELECT f.*,r.name room_name,EXISTS(SELECT 1 FROM security_audit a WHERE a.target_type=\'room_fault\' AND a.target_id=CAST(f.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AND a.action=\'stay.fault_attachment_saved\' AND a.outcome=\'succeeded\') attachment_available,EXISTS(SELECT 1 FROM security_audit a WHERE a.target_type=\'room_fault\' AND a.target_id=CAST(f.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci AND a.action=\'stay.repair_attachment_saved\' AND a.outcome=\'succeeded\') repair_attachment_available FROM stay_faults f JOIN rooms r ON r.id=f.room_id ORDER BY f.id DESC LIMIT 100')->fetchAll(),'audits'=>$this->repo->run('SELECT a.*,r.name room_name FROM stay_room_audits a JOIN rooms r ON r.id=a.room_id ORDER BY a.id DESC LIMIT 100')->fetchAll(),'movements'=>$this->repo->run('SELECT m.*,e.name extra_name FROM stock_movements m JOIN extras e ON e.id=m.extra_id ORDER BY m.id DESC LIMIT 100')->fetchAll(),'refunds'=>[],'booking'=>null,'bill'=>null,'payments'=>[],'lines'=>[],'incidentals'=>[],'activity'=>[]];
         $heldByItem=[];
         if((new FinanceService($this->access))->installed())foreach($this->repo->run("SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.extra_id')) FROM finance_events WHERE target_type='stock_issue' AND kind='si_reported'")->fetchAll(\PDO::FETCH_COLUMN) as $extra)$heldByItem[$extra]=\Tivoli\Repository\StockAvailability::hold($this->repo,(int)$extra)['held'];
@@ -460,7 +508,7 @@ final class StayService
                 && $data['bill']['checkout_balance']!==null && !$data['bill']['legacy_unknown'] && $data['bill']['balance']>0
                 && (new FinanceService($this->access))->canPostLate($actor);
             $data['lines']=$this->repo->run('SELECT * FROM booking_extras WHERE booking_id=? ORDER BY id',[$bookingId])->fetchAll();$data['incidentals']=$this->repo->run('SELECT * FROM stay_incidentals WHERE booking_id=? ORDER BY id',[$bookingId])->fetchAll();
-            $data['activity']=$this->repo->run("SELECT action,occurred_at created_at,details payload FROM security_audit WHERE target_type='booking' AND target_id=? AND action LIKE 'stay.%' ORDER BY id DESC LIMIT 100",[(string)$bookingId])->fetchAll();
+            $data['activity']=$this->repo->run("SELECT action,occurred_at created_at,details payload FROM security_audit WHERE target_type='booking' AND target_id=? AND action LIKE 'stay.%'".($this->repo->isAdmin($actor)?'':' AND actor_id=?').' ORDER BY id DESC LIMIT 100',$this->repo->isAdmin($actor)?[(string)$bookingId]:[(string)$bookingId,$actor])->fetchAll();
             $this->access->audit($actor,'stay.viewed','booking',(string)$bookingId,'succeeded');
         }
         return $data;

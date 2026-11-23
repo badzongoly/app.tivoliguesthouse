@@ -1,5 +1,5 @@
 (()=>{const root=document.querySelector('.stock-issues');if(!root)return;
-root.querySelectorAll('form[data-confirm]').forEach(f=>f.addEventListener('submit',e=>{if(!window.confirm(f.dataset.confirm))e.preventDefault();}));
+
  const quantity=value=>{if(!/^(0|[1-9]\d{0,9})(\.\d{1,2})?$/.test(value))throw Error('Use a positive quantity with at most two decimal places.');const [a,b='']=value.split('.');return BigInt(a)*100n+BigInt(b.padEnd(2,'0'));};
  const decimal=n=>`${n<0?'-':''}${(n<0?-n:n)/100n}.${String((n<0?-n:n)%100n).padStart(2,'0')}`;
 const correction=root.querySelector('#stockissue-release');if(correction){const f=correction.closest('form');const update=()=>{try{const original=BigInt(correction.dataset.original),qty=quantity(f.elements.qty.value);if(qty>=original)throw Error('Reduce only the verified mistaken excess.');const released=original-qty;correction.textContent='Safe Excess Released '+decimal(released)+' · Held From Sale '+decimal(BigInt(correction.dataset.held))+' → '+decimal(BigInt(correction.dataset.held)-released)+' · Recorded On Hand '+decimal(BigInt(correction.dataset.stock))+' Unchanged.';}catch(e){correction.textContent=e.message;}};f.addEventListener('input',update);update();}

@@ -109,6 +109,41 @@ $read = static fn(string $view,array $filters=[])=>$repo->read(OwnerReports::fil
 $daily = $read('daily',['end'=>$start]);
 check((int)$daily['payment']['minor']===102000 && (int)$daily['payment']['count']===3,'daily guest receipts count independently of 501 extra lines');
 $cash = $read('cash');
+$detailRows=static fn(string $view,string $detail,array $filters=[])=>$read($view,['detail'=>$detail]+$filters)['detail']['rows'];
+$detailRefunds=$detailRows('cash','refunds',['method'=>'card']);
+check(array_sum(array_column($detailRefunds,'minor'))===(int)$cash['refunds'],'refund details reconcile and remain independent of receipt method');
+$detailDeposits=[];
+foreach ($detailRows('cash','deposits') as $part) {
+    $detailDeposits[$part['state']]=($detailDeposits[$part['state']]??0)+(int)$part['minor'];
+}
+ksort($detailDeposits);
+check($detailDeposits===array_map('intval',array_column($cash['deposits'],'minor','state')),'deposit detail reconciles by state');
+$detailCustody=$detailRows('cash','custody');
+foreach (['receipts','held','transit','confirmed'] as $column) {
+    check(array_sum(array_column($detailCustody,$column))===array_sum(array_column($cash['custody']['rows'],$column)),
+        'cash custody detail reconciles on '.$column);
+}
+$detailMoMo=[];
+foreach ($detailRows('cash','momo') as $match) {
+    $detailMoMo[$match['coverage']]=($detailMoMo[$match['coverage']]??0)+(int)$match['minor'];
+}
+ksort($detailMoMo);
+check($detailMoMo===array_map('intval',array_column($cash['momo'],'minor','coverage')),'MoMo details reconcile by matching coverage');
+check(count($detailRows('daily','momo',['end'=>$start]))===(int)$daily['pending'],'daily pending details match the daily review count');
+check(array_sum(array_column($detailRows('daily','room-charges',['end'=>$after]),'minor'))===90000,'departure detail reconciles and excludes service rooms');
+check(count($detailRows('daily','arrivals',['end'=>$mid]))===(int)$read('daily',['end'=>$mid])['stayCounts']['arrivals'],'arrivals reconcile to daily count');
+check(count($detailRows('daily','departures',['end'=>$after]))===(int)$read('daily',['end'=>$after])['stayCounts']['departures'],'departures reconcile to actual departure count');
+$expenseMonth=$read('monthly',['end'=>$end]);
+$expenses=$detailRows('monthly','expenses',['end'=>$end]);
+check((int)$expenseMonth['months'][substr($end,0,7)]['expenses']===array_sum(array_column($expenses,'minor')),'expense detail uses selected month and matches recorded costs');
+foreach ([['view'=>'cash','detail'=>'expenses'],['view'=>'daily','detail'=>['momo']]] as $bad) {
+    try {OwnerReports::filters($bad,$asOf);} catch (InvalidArgumentException $e) {continue;}
+    throw new RuntimeException('Invalid detail accepted');
+}
+check(true,'detail filter rejects malformed and cross-report values');
+$filteredExpense=$detailRows('monthly','expenses',['end'=>$end,'detail_category'=>(string)$category]);
+check(count($filteredExpense)===1&&(int)$filteredExpense[0]['minor']===1135,'expense category drill-down keeps the exact category and amount');
+
 check(array_sum(array_column($cash['methods'],'minor'))===107250 && $cash['page']['count']===5,'cash report includes advance and historical card, excludes next midnight');
 check((int)$cash['refunds']===300,'refund remains separate from incoming payments');
 $custody = $cash['custody']['rows'][0];

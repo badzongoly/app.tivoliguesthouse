@@ -44,10 +44,11 @@ token=secrets.token_hex(5);profile={'name':'Synthetic HTTP HR','email':'hr-http-
 fields=admin.form('/staff.php?new=1','create');status,headers,body,raw=admin.request('/staff.php?new=1',{**fields,**profile});check(status==302,'onboarding draft saves through HTTP');staff_id=int(re.search(r'id=(\d+)',headers['Location'])[1]);path='/staff.php?id='+str(staff_id)
 for tab in ['overview','employment','salary','leave','documents','access','activity']:
  status,headers,body,raw=admin.request(path+'&tab='+tab);check(status==200 and 'id="workspace-main"' in body,'staff profile tab '+tab)
-body=admin.request(path+'&tab=leave')[2];check('<textarea name="reason"' in body,'leave request has multiline reason')
+body=admin.request(path+'&tab=leave')[2];check('name="action" value="request_leave"' not in body,'draft employment does not advertise an invalid leave action')
 body=admin.request(path+'&tab=documents')[2];check('hr-document-type-form' not in body and 'Manage document types in Settings' in body,'document type management is under Settings')
 check(admin.request(path,{'action':'save_profile'})[0]==403,'HR mutations require CSRF')
 activation=admin.form(path+'&tab=employment','activate');check(admin.request(path,{**activation,'reason':'Synthetic activation approval'})[0]==302,'administrator activates complete onboarding')
+body=admin.request(path+'&tab=leave')[2];check('<textarea name="reason"' in body,'active leave request has multiline reason')
 document_form=admin.form(path+'&tab=documents','upload_document');body=admin.request(path+'&tab=documents')[2];type_id=re.search(r'name="type_id".*?<option value="(\d+)"',body,re.S)[1]
 pdf=b'%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF'
 payload={**document_form,'type_id':type_id};check(admin.request(path,payload,{'document':('signed-contract.pdf',pdf,'application/pdf')})[0]==302,'private signed document uploads through HTTP')

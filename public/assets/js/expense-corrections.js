@@ -1,5 +1,5 @@
 'use strict';
-document.querySelectorAll('.corrections form[data-confirm]').forEach(form=>form.addEventListener('submit',e=>{if(!window.confirm(form.dataset.confirm))e.preventDefault();}));
+
 const ecForm=document.getElementById('ec-request');
 if(ecForm){
  const minor=v=>{if(!/^\d{1,10}(\.\d{1,2})?$/.test(v))throw Error('Enter positive totals with up to two decimals.');const [a,b='']=v.split('.');const n=BigInt(a)*100n+BigInt(b.padEnd(2,'0'));if(n<1n)throw Error('Enter positive totals. Duplicate reversal needs a retained expense.');return n;};

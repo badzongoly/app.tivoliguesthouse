@@ -40,7 +40,7 @@ check(staff.request(room,start|dict(csrf='invalid'))[0]==403,'Forged housekeepin
 code,headers,_=staff.request(room,start);check(code==302,'Assigned cleaning starts with redirect')
 id=int(re.search(r'id=(\d+)',headers['Location'])[1]);detail=root+'?id='+str(id);clean=detail+'&form=clean'
 check(inspector.request(clean)[0]==403,'Other staff cannot edit assigned cleaning')
-body=staff.request(clean)[2];check('data-select-clean="all"' in body and 'Select All' in body,'Cleaning Select All available')
+body=staff.request(clean)[2];check('data-select-clean="all"' in body and 'Check All Cleaning Steps' in body,'Cleaning Select All available')
 items=re.findall(r'name="done\[\]" value="([^"]+)"',body);steps=len(re.findall(r'data-clean-step=',body));check(len(items)>0,'Captured checklist rendered')
 pause=staff.fields(clean,'progress')|dict(done='[]',direction='pause');code,headers,_=staff.request(clean,pause);check(code==302 and 'form=clean' not in headers.get('Location',''),'Save & Return opens room detail')
 p=staff.fields(clean,'progress');check(staff.request(clean,p|dict(done='[]',direction='next'))[0]==400,'Missing step items rejected')

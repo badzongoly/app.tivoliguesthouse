@@ -6,6 +6,7 @@ function workspace_context(array $actor): array {
         'occupancy.php'=>[match($_GET['section'] ?? ''){'extras'=>'Extras & Stock','rooms','areas'=>'Property & Audits',default=>'Check-In & Occupancy'},'Guest details, bills and room readiness.'],'guest-id.php'=>['Guest identity','Private guest document.'],
         'handover.php'=>['Shift Handover','Open work, cash custody and recorded acknowledgements.'],
         'staff.php'=>['Staff & HR','Your people and their employment records.'],
+        'cleaning-settings.php'=>['Settings','Configure future checks and lists; retain completed records.'],
         'hr-settings.php'=>['Settings','HR lists and payment providers.'],
         'hr-document.php'=>['Staff documents','Private HR attachments.'],
         'dashboard.php'=>['Today','Your guesthouse at a glance.'],
@@ -19,7 +20,7 @@ function workspace_context(array $actor): array {
         'reminders.php'=>['Reminders & Delivery','Your source-linked work and delivery preferences.'],
         'owner-exceptions.php'=>['Owner Exceptions','Linked open work for the designated owner.'],
         'weekly-audits.php'=>['Weekly Audits & Follow-Ups','Original findings, named responsibility and verified completion.'],
-        'housekeeping.php'=>['Housekeeping & Room Readiness','Named cleaning, independent inspection and recorded exceptions.'],
+        'housekeeping.php'=>['Check-In & Occupancy','Named cleaning, independent inspection and recorded exceptions.'],
         'stock-issues.php'=>['Stock Non-Sale Issues','Reports, owner decisions and actual stock disposition.'],
         'stock-counts.php'=>['Stock Counts & Variance Review','Physical counts, owner decisions and retained history.'],
         'purchases.php'=>['Purchase & Expense Requests','Approval, delivery, cost and settlement.'],
@@ -30,7 +31,7 @@ function workspace_context(array $actor): array {
         'expenses.php'=>['Finance & Cash','Record spending and follow approvals.'],
         'reports.php'=>['Reports','Review guesthouse performance.'],
         'owner_reports.php'=>['Owner Reports','Visual reports for rooms, receipts, extras and expenses.'],
-        'users.php'=>['Staff & access','Individual accounts, roles and privileges.'],
+        'users.php'=>['System Access','Individual accounts, roles and privileges.'],
         'audit.php'=>['Audit Trail','Who did what, and when. All times are UTC.'],
         'admin_recovery.php'=>['Historical Recovery','Restricted historical recording workspace.'],
         'change-password.php'=>['Change password','Keep your staff account secure.'],
@@ -66,4 +67,14 @@ function workspace_icon(string $name): string {
       'menu'=>'M4 6h16M4 12h16M4 18h16',
     ];
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'.($paths[$name] ?? $paths['audit']).'"/></svg>';
+}
+
+// Content versions prevent cached page scripts from retaining retired handlers.
+function workspace_asset_url(string $path): string {
+    if (!preg_match('~\Aassets/(?:js|css)/[a-z0-9-]+\.(?:js|css)\z~D', $path)) {
+        throw new InvalidArgumentException('Unsupported workspace asset.');
+    }
+    $file=dirname(__DIR__,2).'/public/'.$path;
+    if (!is_file($file)) throw new RuntimeException('Workspace asset is unavailable.');
+    return access_url($path).'?v='.substr(hash_file('sha256',$file),0,16);
 }

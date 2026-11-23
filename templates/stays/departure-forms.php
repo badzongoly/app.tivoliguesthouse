@@ -5,7 +5,7 @@ $pendingCase=$departureCase&&in_array($departureCase['status'],['pending','dispu
 $nowUtc=gmdate('Y-m-d\TH:i:s');
 ?>
 <?php if($form==='report_departure'&&$guest['status']==='active'):?>
-<p>Record the guest’s actual departure or the time their absence was discovered. The bill stays provisional until Eugene reviews it.</p>
+<p>Record the guest’s actual departure or the time their absence was discovered. The bill stays provisional until Eugene reviews it. Reporting the departure does not record a payment.</p>
 <form method="post" enctype="multipart/form-data" class="stay-form" data-confirm="Report this departure? Review vacancy and access security. No payment will be created.">
 <?php stay_fields('report_departure',$bookingId);
 stay_input('Discovered At (UTC)','discovered_at',$nowUtc,'datetime-local',true,'step="1"');
@@ -14,7 +14,7 @@ stay_textarea('What Happened','reason','',true);?>
 <label class="stay-field">Supporting Evidence (Optional)<input type="file" name="evidence" accept=".pdf,.jpg,.jpeg,.png"><small>PDF, JPEG or PNG · Maximum 2 MB · Private</small></label>
 <?php stay_check('I Verified That the Room Is Vacant','vacant');stay_check('Keys Recovered or Access Secured','secured');?>
 <p>Verified vacancy and secured access allow cleaning. Otherwise the room stays blocked until staff verify both.</p>
-<div class="stay-actions"><button class="button">Report Departure</button><?php $link('Cancel',['booking_id'=>$bookingId]);?></div></form>
+<div class="stay-actions"><button class="button">Report Guest Departure</button><?php $link('Cancel',['booking_id'=>$bookingId]);?></div></form>
 <?php elseif($form==='secure_departure_room'&&$departureCase&&!$departureCase['secured']&&$departureCase['status']!=='retracted'):?>
 <form method="post" class="stay-form" data-confirm="Confirm the room is vacant and access is secured?">
 <?php stay_fields('secure_departure_room',$bookingId);

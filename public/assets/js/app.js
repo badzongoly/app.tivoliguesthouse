@@ -46,3 +46,44 @@
   mobile.addEventListener('change', () => { close(false); });
   sync();
 })();
+
+(() => {
+  'use strict';
+  const allowedImages = new Set(['image/jpeg', 'image/png']);
+  for (const input of document.querySelectorAll('main input[type="file"]')) {
+    const preview = document.createElement('div');
+    preview.className = 'app-file-preview';
+    preview.hidden = true;
+    const names = document.createElement('p');
+    names.setAttribute('role', 'status');
+    const image = document.createElement('img');
+    image.alt = 'Selected attachment';
+    image.hidden = true;
+    preview.append(names,image);
+    (input.closest('label') || input).after(preview);
+    let url;
+    const clear = () => {
+      if (url) URL.revokeObjectURL(url);
+      url = null;
+      image.hidden = true;
+      image.removeAttribute('src');
+    };
+    const render = () => {
+      clear();
+      const files = Array.from(input.files);
+      preview.hidden = files.length === 0;
+      if (preview.hidden) return;
+      names.textContent = (files.length === 1 ? 'Selected file: ' : 'Selected files: ')
+        + files.map(file => file.name).join(', ') + '. Use Choose File to replace.';
+      if (files.length === 1 && allowedImages.has(files[0].type) && files[0].size <= 5 * 1024 * 1024) {
+        url = URL.createObjectURL(files[0]);
+        image.src = url;
+        image.hidden = false;
+      }
+    };
+    image.addEventListener('error', clear);
+    input.addEventListener('change',render);
+    input.form?.addEventListener('reset',()=>queueMicrotask(render));
+    addEventListener('pageshow',render);
+  }
+})();

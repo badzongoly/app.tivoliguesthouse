@@ -1,7 +1,33 @@
 <?php
+if(($_GET['section']??null)==='housekeeping'){require __DIR__.'/housekeeping.php';return;}
 require_once dirname(__DIR__).'/src/Security/require_login.php';
 require_once dirname(__DIR__).'/bootstrap/stays.php';
 $service=stay_service();$actor=(int)$user['id'];$isAdmin=access_service()->repo->isAdmin($actor);$canAuthorizeDeparture=(new \Tivoli\Service\FinanceService(access_service()))->canPostLate($actor);
+if (array_key_exists('payment_status', $_GET)) {
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+    $key = $_GET['payment_status'];
+    try {
+        access_service()->requirePrivilege($actor, 'bookings.manage');
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET' || !is_string($key) || !preg_match('/^[a-f0-9]{32}$/D',$key)) {
+            http_response_code(400);
+            echo '{"status":"invalid"}';
+            exit;
+        }
+        $service->installed();
+        $row = $service->repo->run('SELECT result_json FROM stay_operations WHERE actor_id=? AND operation_key=?',[$actor,$key])->fetchColumn();
+        $result = $row ? json_decode($row,true,512,JSON_THROW_ON_ERROR) : [];
+        $receipt = empty($result['audit']['refund_id']) ? (int)($result['audit']['payment_id'] ?? 0) : 0;
+        echo json_encode($receipt>0 ? ['status'=>'recorded','receipt'=>$receipt,'booking_id'=>(int)$result['booking_id']] : ['status'=>'unconfirmed'], JSON_THROW_ON_ERROR);
+    } catch (\Tivoli\Security\PermissionDenied $denied) {
+        http_response_code(403);
+        echo '{"status":"unavailable"}';
+    } catch (Throwable $unavailable) {
+        http_response_code(503);
+        echo '{"status":"unavailable"}';
+    }
+    exit;
+}
 $error='';$notice='';$confirmation=null;$departurePreview=null;$departureCases=[];$incidentAssignees=[];$view=[];$folioDirectory=['rows'=>[],'next_before'=>null,'filters'=>[]];$operationalActivity=['rows'=>[],'next_before'=>null];$areaAudits=['rows'=>[],'week'=>gmdate('Y-m-d'),'next_before'=>null];
 $before=filter_var($_GET['before'] ?? '0',FILTER_VALIDATE_INT);$before=$before===false?0:max(0,$before);
 $bookingId=filter_var($_GET['booking_id'] ?? '0',FILTER_VALIDATE_INT);
@@ -16,7 +42,7 @@ if($form==='release_fault')$form='repair';
 if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&$form==='area_followup'&&is_string($_GET['audit_key']??null)){
  $task=(new \Tivoli\Service\WeeklyAuditService(access_service()))->association('area',$_GET['audit_key']);header('Location: '.access_url('weekly-audits.php?'.http_build_query($task?['id'=>$task]:['page'=>'area','source_id'=>$_GET['audit_key']])).'#audit-action');exit;
 }
-if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&in_array($form,['clean','inspect'],true)){header('Location: '.access_url('housekeeping.php?room_id='.(int)($_GET['room_id']??$_GET['id']??0)).'#housekeeping-action');exit;}
+if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&in_array($form,['clean','inspect'],true)){header('Location: '.stay_url(['section'=>'housekeeping','room_id'=>(int)($_GET['room_id']??$_GET['id']??0)]).'#housekeeping-action');exit;}
 if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&$form==='stock_count'){header('Location: '.access_url('stock-counts.php?page=new').'#stockcount-action');exit;}
 if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&$form==='stock_in'){header('Location: '.access_url('purchases.php?page=new&type=stock&extra_id='.(int)($_GET['id']??0)).'#purchase-action');exit;}
 if($section==='rooms'){if(in_array($form,['fault','repair'],true))$tab='faults';elseif($form==='room_audit')$tab='audits';elseif($form==='room_save')$tab='master';}
@@ -75,6 +101,11 @@ try {
         $result=$service->execute($actor,$action,$input,$operationKey);
         if(isset($token))unset($_SESSION['stay_confirmations'][$token]);
         $_SESSION['stay_notice']=match($action){'report_departure'=>'Departure reported. Eugene’s review is pending.','secure_departure_room'=>'Room vacancy and access security recorded.','review_departure'=>'Departure review recorded. Original evidence is retained.','departure_followup'=>'Collection follow-up recorded.','collect_outstanding'=>'Outstanding payment recorded by '.(string)$user['name'].'.','checkin'=>'Guest checked in. Payment recorded by '.(string)$user['name'].'.','clear_balance'=>'Full payment recorded by '.(string)$user['name'].'. Review and confirm departure separately.','checkout'=>'Departure recorded. Room sent for cleaning.','allow_checkout'=>'Checkout exception saved. The outstanding balance remains on the guest account.','payment'=>'Payment recorded by '.(string)$user['name'].'.','recover_receipt'=>'Recovered receipt recorded. The checkout snapshot is retained.','extra'=>'Extra posted to the guest account.','extra_save'=>'Extra saved. Existing purchases retain their original prices.',default=>'Action recorded.'};
+        unset($_SESSION['stay_notice_operation']);
+        if (!empty($result['payment_id'])) {
+            $_SESSION['stay_notice'].=' Receipt #'.(int)$result['payment_id'].'.';
+            $_SESSION['stay_notice_operation']=$operationKey;
+        }
         $targetId=(int)($result['booking_id'] ?? $bookingId);
         $query=$targetId?['booking_id'=>$targetId,'tab'=>'bill']:['section'=>$section,'tab'=>$tab];
         if(in_array($action,['clear_balance','allow_checkout'],true))$query=['booking_id'=>$targetId,'form'=>'checkout'];
@@ -91,6 +122,11 @@ try {
         $confirmation=$pending+['token'=>$token];$bookingId=(int)$pending['input']['booking_id'];
     }
     $view=$service->snapshot($actor,$bookingId);
+    $preparationFilter=is_string($_GET['preparation']??null)&&in_array($_GET['preparation'],['ready','needs_cleaning','cleaning','inspection','blocked'],true)?$_GET['preparation']:'all';
+    $preparation=[];$stayPreparation=null;
+    $housekeeping=new \Tivoli\Service\HousekeepingService(access_service());
+    if(!$bookingId&&$section==='board')$preparation=$housekeeping->roomSummaries($actor,$view['rooms']);
+    if($bookingId&&$view['booking']['status']==='checked_out')$stayPreparation=$housekeeping->preparationForStay($actor,$bookingId);
     if($section==='departures')$departureCases=$service->departureCases($actor);
     if($canAuthorizeDeparture&&in_array($form,['review_departure','departure_followup'],true)){
         $incidentAssignees=$service->repo->run('SELECT u.id,u.name FROM users u JOIN security_accounts a ON a.user_id=u.id WHERE a.active=1 ORDER BY u.name,u.id')->fetchAll();
@@ -98,7 +134,9 @@ try {
     if(!$bookingId&&$section==='folios')$folioDirectory=$service->folios($actor,$before,array_intersect_key($_GET,array_flip(['start','end','range'])));
     if(!$bookingId&&$section==='activity')$operationalActivity=$service->operationalActivity($actor,$before);
     if($section==='areas')$areaAudits=$service->areaAudits($actor,array_intersect_key($_GET,array_flip(['week','range','before','history','history_before','audit_key'])));
-    $notice=is_string($_SESSION['stay_notice'] ?? null)?$_SESSION['stay_notice']:'';unset($_SESSION['stay_notice']);
+    $notice=is_string($_SESSION['stay_notice'] ?? null)?$_SESSION['stay_notice']:'';
+    $noticeOperation=$_SESSION['stay_notice_operation'] ?? '';
+    unset($_SESSION['stay_notice'],$_SESSION['stay_notice_operation']);
 }catch(Throwable $exception){
     $error=access_error($exception);$formValues=$_POST;
     try{$view=$service->snapshot($actor,$bookingId);}catch(Throwable $unavailable){$view=[];}

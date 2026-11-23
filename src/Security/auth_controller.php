@@ -30,7 +30,7 @@ try {
         } elseif ($page==='forgot-password.php') {
             $email=$scalar('email'); if (strlen($email)>190 || !filter_var($email,FILTER_VALIDATE_EMAIL)) { throw new RuntimeException('Enter a valid email address.'); }
             access_service()->requestReset($email);
-            $notice='If an eligible account matches, a password-reset link will be delivered. It expires in 30 minutes.';
+            $notice='If an eligible account matches, a password-reset link will be sent to your staff email. Check your inbox and spam folder. The link expires in 30 minutes. If no message arrives, check the address or ask your administrator for help.';
         } elseif ($page==='reset-password.php') {
             if ($scalar('password')!==$scalar('confirm_password')) { throw new RuntimeException('Passwords do not match.'); }
             if (!access_service()->resetPassword($scalar('token'),$scalar('password'))) { throw new RuntimeException('This reset link is invalid or expired. Request a new link.'); }

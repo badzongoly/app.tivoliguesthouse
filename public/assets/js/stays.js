@@ -1,4 +1,4 @@
-(()=>{'use strict';const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;const focusAction=()=>{const target=document.getElementById(location.hash.slice(1))||document.querySelector('.error');if(!target)return;target.scrollIntoView({behavior:reduced?'instant':'smooth',block:'start'});const field=target.querySelector('input:not([type=hidden]),select,textarea,button');(field||target).focus({preventScroll:true});};window.addEventListener('pageshow',()=>setTimeout(focusAction,30));window.addEventListener('hashchange',()=>setTimeout(focusAction,30));document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',()=>{const b=form.querySelector('button[type=submit],button:not([type])');if(b){b.setAttribute('aria-busy','true');setTimeout(()=>b.removeAttribute('aria-busy'),4000);}}));})();
+(()=>{'use strict';const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;const focusAction=()=>{if(document.querySelector('dialog[open]'))return;const target=document.getElementById(location.hash.slice(1))||document.querySelector('.error');if(!target)return;target.scrollIntoView({behavior:reduced?'instant':'smooth',block:'start'});const field=target.querySelector('input:not([type=hidden]),select,textarea,button');(field||target).focus({preventScroll:true});};window.addEventListener('pageshow',()=>setTimeout(focusAction,30));window.addEventListener('hashchange',()=>setTimeout(focusAction,30));document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',()=>{const b=form.querySelector('button[type=submit],button:not([type])');if(b){b.setAttribute('aria-busy','true');setTimeout(()=>b.removeAttribute('aria-busy'),4000);}}));})();
 
 (()=>{'use strict';const form=document.querySelector('[data-cleaning-wizard]');if(!form)return;
 const steps=[...form.querySelectorAll('[data-cleaning-step]'),form.querySelector('[data-cleaning-review]')];
@@ -23,22 +23,98 @@ form.addEventListener('change',()=>show(false));show(false);
             const rate=stayType.value==='short'?form.dataset.shortRate:form.dataset.overnightRate;
             if(amount.value===''||amount.value===expected.value)amount.value=rate;
             expected.value=rate;
-            form.querySelector('[data-arrival-rate]').textContent='₵'+rate;
+            for (const label of form.querySelectorAll('[data-arrival-rate], [data-arrival-summary]')) label.textContent='₵'+rate;
             form.querySelector('[data-arrival-coverage]').textContent=stayType.value==='short'
                 ?'Fixed Short-Stay Session · Maximum Two Hours'
                 :'First Overnight Charge · Through Next Day at 12:00:00 UTC';
         });
     }
-    document.querySelectorAll('.stay-form[data-confirm]').forEach(target=>{
-        target.addEventListener('submit',event=>{
-            let message=target.dataset.confirm;
-            if(target.hasAttribute('data-checkin-payment')){
-                message=target.querySelector('[name="guest_name"]').value+' · Room Payment '
-                    +target.querySelector('[name="amount"]').value+' GHS · '
-                    +target.querySelector('[name="payment_type"]').value
-                    +'. Confirm check-in and record the receipt?';
-            }
-            if(!window.confirm(message))event.preventDefault();
-        });
+})();
+
+(() => {
+    'use strict';
+    const panel = document.querySelector('[data-payment-recovery]');
+    const scope = document.querySelector('[data-return-scope]')?.dataset.returnScope;
+    if (!panel || !scope) return;
+    const key = 'tivoli-payment:' + scope;
+    let pending;
+    try {
+        pending = sessionStorage.getItem(key);
+    } catch {
+        return;
+    }
+    const message = panel.querySelector('[data-payment-recovery-message]');
+    const check = panel.querySelector('[data-payment-check]');
+    const account = panel.querySelector('[data-payment-account]');
+    const dismiss = panel.querySelector('[data-payment-dismiss]');
+    const notice = document.querySelector('#stay-result[role=status]');
+    if (pending && notice?.dataset.receiptOperation === pending) {
+        sessionStorage.removeItem(key);
+        pending = null;
+    }
+
+    document.addEventListener('submit', event => {
+        const form = event.target;
+        if (event.defaultPrevented || !form.matches('[data-stay-payment], [data-checkin-payment], [data-payment-final]')) return;
+        const operation = form.elements.operation_key?.value;
+        if (!/^[a-f0-9]{32}$/.test(operation || '')) return;
+        try { sessionStorage.setItem(key, operation); } catch { /* The original submit can still proceed. */ }
     });
+    if (!pending) return;
+
+    panel.hidden = false;
+    check.addEventListener('click', async () => {
+        check.disabled = true;
+        try {
+            const url = new URL(panel.dataset.paymentRecovery, location.href);
+            url.searchParams.set('payment_status', pending);
+            const response = await fetch(url, {headers:{Accept:'application/json'}, cache:'no-store'});
+            if (!response.ok) throw new Error('Status unavailable');
+            const result = await response.json();
+            if (result.status === 'recorded') {
+                message.textContent = 'Payment recorded. Receipt #' + result.receipt + '.';
+                url.searchParams.delete('payment_status');
+                url.searchParams.set('booking_id', result.booking_id);
+                url.searchParams.set('tab', 'bill');
+                account.href = url;
+                account.hidden = false;
+                dismiss.hidden = false;
+            } else {
+                message.textContent = 'No saved receipt was found for this submission yet. Check again and review the guest account before entering another payment.';
+            }
+        } catch {
+            message.textContent = 'Payment status is unavailable. Check again after reconnecting before entering another payment.';
+        } finally {
+            check.disabled = false;
+        }
+    });
+    dismiss.addEventListener('click', () => {
+        sessionStorage.removeItem(key);
+        panel.hidden = true;
+    });
+})();
+
+(() => {
+    const panel = document.querySelector('[data-room-search-panel]');
+    if (!panel) return;
+    const rooms = [...document.querySelectorAll('#stay-room-grid .stay-room')];
+    if (!rooms.length) return;
+    const entries = rooms.map(room => ({
+        room,
+        search: [...room.querySelectorAll('h2,h3')].map(name => name.textContent.trim().toLocaleLowerCase()).join(' ')
+    }));
+    const search = panel.querySelector('[data-room-search]');
+    const status = panel.querySelector('[data-room-search-status]');
+    const render = () => {
+        const terms = search.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+        let shown = 0;
+        for (const entry of entries) {
+            entry.room.hidden = !terms.every(term => entry.search.includes(term));
+            if (!entry.room.hidden) shown++;
+        }
+        status.textContent = terms.length ? shown ? shown + ' matching room' + (shown===1?'':'s') : 'No rooms match your search.' : '';
+    };
+    search.addEventListener('input', render);
+    addEventListener('pageshow',render);
+    panel.hidden = false;
 })();

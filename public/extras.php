@@ -164,7 +164,7 @@ $extras = $mysqli->query('SELECT * FROM extras ORDER BY active DESC, name ASC')-
                       </td>
                       <td class="text-end">
                         <a class="btn btn-sm btn-outline-light" href="?edit=<?php echo $x['id']; ?>">Edit</a>
-                        <a class="btn btn-sm btn-outline-danger" href="?delete=<?php echo $x['id']; ?>" onclick="return confirm('Delete this item?');">Delete</a>
+                        <a class="btn btn-sm btn-outline-danger" href="?delete=<?php echo $x['id']; ?>" data-confirm="Delete this item?">Delete</a>
                       </td>
                     </tr>
                   <?php endforeach; ?>

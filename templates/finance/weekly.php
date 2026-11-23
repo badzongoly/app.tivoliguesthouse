@@ -16,7 +16,7 @@ $outcomeLabel = static fn(array $event): string => match ($event['kind']) {
 ?>
 <?php if(!empty($weekly['departure_incidents'])):?><section class="card"><h2>Open Departure Incidents</h2><p><?=$weekly['departure_incidents']?> incident or collection follow-ups remain visible across review periods. <a href="<?=access_h(access_url('occupancy.php?section=departures'))?>">Review Open Cases</a></p></section><?php endif?>
 <?php if(isset($totals['stock_costing'])):$stockCost=$totals['stock_costing'];?><section class="card"><h2>Stock Cost Coverage</h2><p><?=$closed?'Retained Closed Snapshot':'Current Week Review'?> · <?=$stockCost['complete']?'Covered Stock Cost Result':'Incomplete / Partial Stock Cost Coverage'?></p><p>Recorded-Cost Result <?=access_h(fm($stockCost['recorded_profit']))?> · Linked Inventory Purchase Addback <?=access_h(fm($stockCost['acquisition']))?> · Consumed Stock Costs <?=access_h(fm(array_sum($stockCost['costs'])))?>.</p><p><?=$stockCost['complete']?'Stock Cost Management Profit':'Result Before Missing Costs / Partial Coverage'?> <?=access_h(fm($stockCost['before_unknown']))?>. Closing the cash review does not make unknown stock costs complete.</p><a href="<?=access_h(access_url('finance.php?page=profit&start='.$weekly['start']))?>#stock-costing">Open Stock Cost Review</a></section><?php endif?>
-<section class="card" id="weekly-totals tabindex="-1">
+<section class="card" id="weekly-totals" tabindex="-1">
     <form method="get" class="finance-inline">
         <input type="hidden" name="page" value="weekly">
         <label>Week Starting Monday <input type="date" name="start" required value="<?=access_h($weekly['start'])?>" max="<?=access_h($s->priorWeekStart())?>"></label>

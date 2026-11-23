@@ -3,22 +3,70 @@ require_once dirname(__DIR__).'/src/Security/require_login.php';
 require_once dirname(__DIR__).'/bootstrap/app.php';
 require_once dirname(__DIR__).'/bootstrap/stay-reporting.php';
 
-// Derive quick stats (assumes schema already exists)
-$rooms_total = (int)$mysqli->query("SELECT COUNT(*) c FROM rooms WHERE rooms.type <> 'Service'")->fetch_assoc()['c'];
-$rooms_occ   = (int)$mysqli->query("SELECT COUNT(*) c FROM rooms WHERE status='occupied'")->fetch_assoc()['c'];
-$rooms_vac   = max(0, $rooms_total - $rooms_occ);
-$bookingSource=\Tivoli\Repository\DepartureFacts::source((new \Tivoli\Service\FinanceService(access_service()))->installed());
-$active_bookings=(int)access_service()->repo->run("SELECT COUNT(*) FROM ($bookingSource) b WHERE b.operational_status IN ('active','checked_in')")->fetchColumn();
+require_once dirname(__DIR__).'/bootstrap/stays.php';
+
+$dashboardActor = (int)$user['id'];
+$dashboardPermissions = access_service()->repo->privileges($dashboardActor);
+$dashboardFinance = new \Tivoli\Service\FinanceService(access_service());
+$roomCounts = null;
+$continueCleaning = null;
+$dashboardCanBook = in_array('bookings.manage', $dashboardPermissions, true);
+if ($dashboardCanBook) {
+    try {
+        $dashboardRooms = stay_service()->roomBoard($dashboardActor);
+        $roomCounts = ['ready'=>0, 'cleaning'=>0, 'inspection'=>0, 'blocked'=>0];
+        foreach ($dashboardRooms as $room) {
+            if (\Tivoli\Service\StayService::checkInReady($room)) $roomCounts['ready']++;
+        }
+        try {
+            $dashboardPreparation = (new \Tivoli\Service\HousekeepingService(access_service()))->roomSummaries($dashboardActor,$dashboardRooms);
+            foreach ($dashboardPreparation as $roomId=>$preparation) {
+                $state = $preparation['state'];
+                if ($state !== 'ready' && isset($roomCounts[$state])) $roomCounts[$state]++;
+                if ($continueCleaning === null && $state === 'cleaning' && $preparation['form'] === 'clean') {
+                    $continueCleaning = (int)$preparation['attempt_id'];
+                }
+            }
+        } catch (RuntimeException $unavailable) {
+            $roomCounts = ['ready'=>$roomCounts['ready']];
+        }
+    } catch (RuntimeException $unavailable) {
+        $roomCounts = null;
+    }
+}
+$dashboardCanPrepare = false;
+if (!$dashboardCanBook && in_array('rooms.manage',$dashboardPermissions,true)) {
+    try {
+        (new \Tivoli\Service\HousekeepingService(access_service()))->permit($dashboardActor);
+        $dashboardCanPrepare = true;
+    } catch (RuntimeException $unavailable) {
+        $dashboardCanPrepare = false;
+    }
+}
+$dashboardCanRecordIncome = $dashboardFinance->installed()
+    && (bool)array_intersect(['bookings.manage','expenses.submit','expenses.manage','expenses.approve','reports.view','payments.view'],$dashboardPermissions);
 
 // Today's revenue
 $receiptSource=\Tivoli\Repository\ReceiptAccounting::paymentsSql((new \Tivoli\Service\FinanceService(access_service()))->installed());
 $receiptCorrections=\Tivoli\Repository\ReceiptAccounting::period(access_service()->repo,gmdate('Y-m-d'),gmdate('Y-m-d'));
 $today_rev = (float)access_service()->repo->run("SELECT COALESCE(SUM(amount),0) s FROM ($receiptSource) p WHERE DATE(created_at)=UTC_DATE()")->fetchColumn();
 
-// ---- Charts data (last 90 days for headroom) ----
-$st = access_service()->repo->run("SELECT DATE(created_at) d, SUM(amount) s FROM ($receiptSource) p GROUP BY DATE(created_at) ORDER BY d ASC");
-$labels = [];$rev_series=[];
-while ($r=$st->fetch()) { $labels[]=$r['d']; $rev_series[]=(float)$r['s']; }
+// Limit non-admin chart payloads on the server, not just the visible range.
+$chartAdmin=access_service()->repo->isAdmin((int)$user['id']);
+$chartDays=$chartAdmin?30:7;
+$chartToday=new DateTimeImmutable('today',new DateTimeZone('UTC'));
+$chartStart=$chartToday->modify('-6 days');
+$chartEnd=$chartToday->modify('+1 day');
+$chartWhere=$chartAdmin?'':' WHERE created_at>=? AND created_at<?';
+$st=access_service()->repo->run("SELECT DATE(created_at) d, SUM(amount) s FROM ($receiptSource) p".$chartWhere.' GROUP BY DATE(created_at) ORDER BY d ASC',$chartAdmin?[]:[$chartStart->format('Y-m-d H:i:s'),$chartEnd->format('Y-m-d H:i:s')]);
+$labels=[];$rev_series=[];$dailyRevenue=[];
+while($r=$st->fetch()){
+  if($chartAdmin){$labels[]=$r['d'];$rev_series[]=(float)$r['s'];}
+  else $dailyRevenue[$r['d']]=(float)$r['s'];
+}
+if(!$chartAdmin)for($day=$chartStart;$day<$chartEnd;$day=$day->modify('+1 day')){
+  $date=$day->format('Y-m-d');$labels[]=$date;$rev_series[]=$dailyRevenue[$date]??0;
+}
 
 // Rooms for histogram (booked nights by room)
 $rooms_list = $mysqli->query("SELECT id,name FROM rooms WHERE rooms.type <> 'Service' ORDER BY name")->fetch_all(MYSQLI_ASSOC);
@@ -94,8 +142,8 @@ function _countBookedNightsByRoom($mysqli, $rooms_list, $days){
 }
 
 $room_nights7  = _countBookedNightsByRoom($mysqli, $rooms_list, 7);
-$room_nights14 = _countBookedNightsByRoom($mysqli, $rooms_list, 14);
-$room_nights30 = _countBookedNightsByRoom($mysqli, $rooms_list, 30);
+$room_nights14 = $chartAdmin?_countBookedNightsByRoom($mysqli, $rooms_list, 14):[];
+$room_nights30 = $chartAdmin?_countBookedNightsByRoom($mysqli, $rooms_list, 30):[];
 ?>
 <!doctype html>
 <html lang="en">
@@ -174,55 +222,54 @@ $room_nights30 = _countBookedNightsByRoom($mysqli, $rooms_list, 30);
 <div class="content">
   <?php include dirname(__DIR__).'/templates/partials/navtop.php'; ?>
   <main id="workspace-main" tabindex="-1" class="container py-4">
-    <div class="app-page-heading-row"><div><p class="app-eyebrow">YOUR DAY AT TIVOLI</p><h1>Today</h1><p>A clear view of your guesthouse, ready for the day.</p><?php if($receiptCorrections['count']):?><p>Today's recorded receipt totals include recording corrections. These move no money and do not change earned room revenue.</p><?php endif?></div><?php if(in_array('bookings.manage',$workspace['permissions'],true)):?><a class="btn btn-primary" href="bookings.php">New check-in <span aria-hidden="true">↗</span></a><?php endif?></div>
-
-    <!-- Top stats become 2x2 on phones -->
-    <div class="row g-3">
-      <div class="col-6 col-md-3"><div class="card p-3 h-100"><div class="text-secondary">Rooms</div><div class="h2 mb-0"><?php echo $rooms_total ?? 0; ?></div></div></div>
-      <div class="col-6 col-md-3"><div class="card p-3 h-100"><div class="text-secondary">Occupied</div><div class="h2 mb-0"><?php echo $rooms_occ ?? 0; ?></div></div></div>
-      <div class="col-6 col-md-3"><div class="card p-3 h-100"><div class="text-secondary">Vacant</div><div class="h2 mb-0"><?php echo $rooms_vac ?? 0; ?></div></div></div>
-      <div class="col-6 col-md-3"><div class="card p-3 h-100"><div class="text-secondary">Active Bookings</div><div class="h2 mb-0"><?php echo $active_bookings ?? 0; ?></div></div></div>
-    </div>
-
-    <!-- KPI + Quick actions stack on mobile -->
-    <div class="row g-3 mt-1 align-items-stretch">
-      <div class="col-12 col-lg-6">
-        <div class="card p-3 h-100">
-          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div>
-              <div class="text-secondary">Today's Revenue</div>
-              <div class="h3 mb-0">₵<?php echo number_format($today_rev ?? 0,2); ?></div>
-            </div>
-            <a class="btn btn-outline-light" href="bookings.php">Go to Bookings</a>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-lg-6">
-        <div class="card p-3 h-100">
-          <div class="text-secondary mb-2">Quick Actions</div>
-          <div class="d-flex gap-2 flex-wrap">
-            <a class="btn btn-primary" href="bookings.php">Check-In</a>
-            <a class="btn btn-outline-primary" href="bookings.php">Check-Out</a>
-            <a class="btn btn-outline-light" href="rooms.php">Manage Rooms</a>
-            <a class="btn btn-outline-light" href="extras.php">Manage Extras</a>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div class="app-page-heading-row"><div><h1>Today</h1></div></div>
+    <?php if($continueCleaning):?>
+    <section class="card p-3 mb-3" aria-labelledby="continue-work">
+      <h2 id="continue-work" class="h4">Continue My Work</h2>
+      <div><a class="btn btn-primary py-2" href="<?=access_h(stay_url(['section'=>'housekeeping','id'=>$continueCleaning,'form'=>'clean']))?>#housekeeping-action">Resume Cleaning</a></div>
+    </section>
+    <?php endif?>
+    <?php if($dashboardCanBook || $dashboardCanPrepare || $dashboardCanRecordIncome):?>
+    <nav class="app-shift-actions d-flex flex-wrap gap-2 mb-3" aria-label="Shift actions">
+      <?php if($dashboardCanBook):?>
+      <?php if($roomCounts !== null):?><a class="btn btn-primary py-2" href="<?=access_h(stay_url(['preparation'=>'ready']))?>#stay-workspace">Check In Guest</a><?php endif?>
+      <a class="btn btn-outline-primary py-2" href="<?=access_h(stay_url(['section'=>'folios']))?>#stay-workspace">Find Guest</a>
+      <?php elseif($dashboardCanPrepare):?>
+      <a class="btn btn-primary py-2" href="<?=access_h(stay_url(['section'=>'housekeeping']))?>#housekeeping-action">Find a Room to Prepare</a>
+      <?php endif?>
+      <?php if($dashboardCanRecordIncome):?>
+      <a class="btn btn-outline-primary py-2" href="<?=access_h(access_url('finance.php?page=income&form=income_record').'#finance-action')?>">Record Other Income</a>
+      <?php endif?>
+    </nav>
+    <?php endif?>
+    <?php if($roomCounts !== null):?>
+    <section class="row g-3" aria-label="Room readiness">
+      <?php foreach(['ready'=>'Ready for Check-In','cleaning'=>'Being Cleaned','inspection'=>'Awaiting Inspection','blocked'=>'Blocked'] as $state=>$label):if(!isset($roomCounts[$state]))continue;?>
+      <div class="col-6 col-lg-3"><a class="card p-3 h-100" href="<?=access_h(stay_url(['preparation'=>$state]))?>#stay-workspace">
+        <span><?=$label?></span><strong class="h2 mb-0"><?=$roomCounts[$state]?></strong>
+      </a></div>
+      <?php endforeach?>
+    </section>
+    <?php endif?>
+    <section class="card p-3 mt-3" aria-label="Today's receipts">
+      <span>Today's Recorded Receipts</span>
+      <strong class="h3 mb-0">₵<?=number_format($today_rev,2)?></strong>
+      <?php if($receiptCorrections['count']):?><p>Today's recorded receipt totals include recording corrections. These move no money and do not change earned room revenue.</p><?php endif?>
+    </section>
 
     <!-- Charts with 7/14/30 toggle; stack on mobile -->
     <div class="row g-3 mt-1">
       <div class="col-12 d-flex justify-content-end">
         <div class="btn-group flex-wrap" role="group" aria-label="Range">
-          <button type="button" class="btn btn-outline-primary" id="range7">7d</button>
-          <button type="button" class="btn btn-outline-primary" id="range14">14d</button>
-          <button type="button" class="btn btn-outline-primary active" id="range30">30d</button>
+          <button type="button" class="btn btn-outline-primary <?=$chartAdmin?'':'active'?>" id="range7">7d</button>
+          <?php if($chartAdmin):?><button type="button" class="btn btn-outline-primary" id="range14">14d</button>
+          <button type="button" class="btn btn-outline-primary active" id="range30">30d</button><?php endif?>
         </div>
       </div>
       <div class="col-12 col-md-6">
         <div class="card p-3 chart-box">
           <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="m-0">Daily Revenue (30 days)</h5>
+            <h5 class="m-0" id="revTitle">Daily Revenue (<?=$chartDays?> days)</h5>
           </div>
           <canvas id="revChart" aria-label="Daily revenue chart" role="img"></canvas>
         </div>
@@ -230,7 +277,7 @@ $room_nights30 = _countBookedNightsByRoom($mysqli, $rooms_list, 30);
       <div class="col-12 col-md-6">
         <div class="card p-3 chart-box">
           <div class="d-flex justify-content-between align-items-center mb-2">
-            <h5 class="m-0" id="occTitle">Booked Nights by Room (last 30 days)</h5>
+            <h5 class="m-0" id="occTitle">Booked Nights by Room (last <?=$chartDays?> days)</h5>
           </div>
           <canvas id="occChart" aria-label="Booked nights by room chart" role="img"></canvas>
           <p class="text-secondary">Reported departures with unknown times are excluded until owner review.</p>
@@ -266,6 +313,7 @@ $room_nights30 = _countBookedNightsByRoom($mysqli, $rooms_list, 30);
     const nights14  = window.nights14  || <?php echo json_encode($room_nights14 ?? [], JSON_NUMERIC_CHECK); ?>;
     const nights30  = window.nights30  || <?php echo json_encode($room_nights30 ?? [], JSON_NUMERIC_CHECK); ?>;
 
+    const allowedRanges = <?=json_encode($chartAdmin?[7,14,30]:[7])?>;
     let revChart, occChart;
     const sliceLast = (arr, n) => arr.slice(-n);
 
@@ -294,6 +342,7 @@ $room_nights30 = _countBookedNightsByRoom($mysqli, $rooms_list, 30);
     }
 
     function render(n){
+      if(!allowedRanges.includes(n))n=allowedRanges[0];
       const labels = sliceLast(allLabels, n);
       const rev = sliceLast(allRev, n);
       const occCounts = n===7 ? nights7 : (n===14 ? nights14 : nights30);
@@ -308,6 +357,7 @@ $room_nights30 = _countBookedNightsByRoom($mysqli, $rooms_list, 30);
         occChart = new Chart(occCtx, makeOccConfig(roomLabels, occCounts));
       }
 
+      const revenueTitle=document.getElementById('revTitle');if(revenueTitle)revenueTitle.textContent=`Daily Revenue (${n} days)`;
       const t = document.getElementById('occTitle'); if (t) t.textContent = `Booked Nights by Room (last ${n} days)`;
       ['range7','range14','range30'].forEach(id => document.getElementById(id)?.classList.remove('active'));
       document.getElementById(n===7?'range7':(n===14?'range14':'range30'))?.classList.add('active');
@@ -317,7 +367,7 @@ $room_nights30 = _countBookedNightsByRoom($mysqli, $rooms_list, 30);
     document.getElementById('range14')?.addEventListener('click', ()=>render(14));
     document.getElementById('range30')?.addEventListener('click', ()=>render(30));
 
-    render(30);
+    render(<?=$chartDays?>);
 
     // Resize charts on orientation / layout changes
     let resizeTO; const onResize=()=>{ clearTimeout(resizeTO); resizeTO=setTimeout(()=>{ revChart?.resize(); occChart?.resize(); }, 120); };
