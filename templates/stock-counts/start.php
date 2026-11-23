@@ -1,10 +1,14 @@
 <?php
 $stockCountSelected=is_array($_POST['items']??null)?array_map('strval',array_filter($_POST['items'],'is_scalar')):[];
+if($_SERVER['REQUEST_METHOD']!=='POST'&&($_GET['reuse']??null)==='weekly')$stockCountSelected=array_map('strval',$lastWeeklyItems);
 $stockCountPurpose=$values['purpose']??'Weekly Stock Count';
 ?>
 <section class="card" id="stockcount-step" tabindex="-1"><h2>Start A Stock Count</h2>
 <p>Choose the items, count them one at a time, then send the results to Eugene for approval.</p>
-<form method="post" data-count-picker><?php sc_fields('start');?>
+<?php if($lastWeeklyItems):?><div class="sc-row">
+<?php if(($_GET['reuse']??null)==='weekly'):?><?php sc_link('Choose Items',['page'=>'new']);?><?php else:?><?php sc_link('Use Last Weekly Item List',['page'=>'new','reuse'=>'weekly']);?><?php endif?>
+</div><?php endif?>
+<form method="post" data-count-picker><?php sc_fields('start',['guided'=>'1']);?>
 <label>Find Items<input type="search" data-count-search placeholder="Search by item name" autocomplete="off"></label>
 <div class="sc-row"><button type="button" class="secondary" data-count-select>Select Shown</button><button type="button" class="secondary" data-count-clear>Clear Selection</button></div>
 <p data-count-summary role="status" aria-live="polite">Select 1–50 items to count.</p>

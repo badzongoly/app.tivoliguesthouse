@@ -80,6 +80,46 @@ sa(isset($svc->register($staff)['rows'])&&isset($svc->attention($owner)['rows'])
 sa(isset((new \Tivoli\Service\HandoverService($a,$clock))->draft($staff)['snapshot']),'Historical reclassification cannot break handover');
 sd(fn()=>approve($pending),'No adjustment allowed when item no longer tracked');
 
+$first=sx('7.00');$second=sx('5.00');$third=sx('0.00');
+$guidedInput=['items'=>json_encode([$first,$second,$third]),'purpose'=>'Weekly Stock Count','guided'=>'1'];
+$key=sk();$guided=sc($staff,'start',$guidedInput,$key);$id=$guided['id'];
+$replayedStart=sc($staff,'start',$guidedInput,$key);
+sa($guided['next_item']===$first&&$replayedStart['replayed']&&$replayedStart['next_item']===$first
+    &&array_column($svc->detail($staff,$id)['history'],'kind')===['count_window'],'Guided start opens the first window once');
+$firstInput=sv($id,$staff)+['extra_id'=>(string)$first,'qty'=>'6.00','confirmed'=>'1','direction'=>'next'];
+move($first,'-1.00');
+sd(fn()=>sc($staff,'finish',$firstInput),'Guided save rejects movement during the current window');
+sa(array_column($svc->detail($staff,$id)['history'],'kind')===['count_window'],'Failed guided save opens no next window');
+sc($staff,'begin',sv($id,$staff)+['extra_id'=>(string)$first]);
+$firstInput=sv($id,$staff)+['extra_id'=>(string)$first,'qty'=>'6.00','confirmed'=>'1','direction'=>'next'];
+// A failure opening the next window must undo the current line as well.
+$r->run('UPDATE stay_extra_settings SET tracked=0 WHERE extra_id=?',[$second]);
+try {
+    sd(fn()=>sc($staff,'finish',$firstInput),'Invalid next item rejects the combined action');
+    sa(!$svc->detail($staff,$id)['lines'][$first]['complete'],'Failed next window rolls back the saved line');
+} finally {
+    $r->run('UPDATE stay_extra_settings SET tracked=1 WHERE extra_id=?',[$second]);
+}
+$key=sk();$advanced=sc($staff,'finish',$firstInput,$key);$retry=sc($staff,'finish',$firstInput,$key);
+$c=$svc->detail($staff,$id);
+sa($advanced['next_item']===$second&&$retry['replayed']&&$retry['next_item']===$second
+    &&array_column($c['history'],'kind')===['count_window','count_window','count_line','count_window'],'Save and advance is atomic and replays one line and one next window');
+sa(!isset($c['lines'][$second]['window'])&&!isset($c['lines'][$first]['expected']),'Guided count remains blind until all items are complete');
+sd(fn()=>sc($staff,'finish',array_replace($firstInput,['direction'=>'pause']),$key),'Changing direction on a used key is denied');
+$pauseInput=sv($id,$staff)+['extra_id'=>(string)$second,'qty'=>'5.00','confirmed'=>'1','direction'=>'pause'];
+$key=sk();sc($staff,'finish',$pauseInput,$key);
+sa(sc($staff,'finish',$pauseInput,$key)['replayed'],'Save and Pause replays without a duplicate line');
+$c=$svc->detail($staff,$id);
+sa($c['lines'][$second]['complete']&&!$c['lines'][$third]['complete']
+    &&end($c['history'])['kind']==='count_line','Pausing preserves the count without opening another window');
+sd(fn()=>sc($staff,'finish',sv($id,$staff)+['extra_id'=>(string)$third,'qty'=>'0','confirmed'=>'1','direction'=>'next']),'A paused next item still requires a fresh window');
+sc($staff,'begin',sv($id,$staff)+['extra_id'=>(string)$third]);
+$end=sc($staff,'finish',sv($id,$staff)+['extra_id'=>(string)$third,'qty'=>'0','confirmed'=>'1','direction'=>'next']);
+sa(!isset($end['next_item'])&&$svc->detail($staff,$id)['status']==='ready','Explicit zero on the last item reaches review without opening another window');
+send($staff,$id);
+sa($svc->lastWeeklyItems($staff)===[$first,$second,$third]&&$svc->lastWeeklyItems($admin)===[],'Last weekly list belongs to the submitting counter');
+approve($id);
+
 sa(hash('sha256',json_encode($r->run('SELECT * FROM stock_movements WHERE id<=? ORDER BY id',[$cursor])->fetchAll()))===$original,'Original stock movement rows preserved');
 sa(hash('sha256',json_encode([$r->run('SELECT * FROM expenses ORDER BY id')->fetchAll(),$r->run('SELECT * FROM payments ORDER BY id')->fetchAll()]))===$money,'Counts and approvals create no money entries');
 echo "TOTAL $n stock count assertions passed.\n";

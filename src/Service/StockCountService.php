@@ -28,6 +28,19 @@ final class StockCountService
     public function options(int $actor):array{
         $this->permit($actor);return $this->access->repo->run("SELECT e.id,e.name,e.active FROM extras e LEFT JOIN stay_extra_settings s ON s.extra_id=e.id WHERE COALESCE(s.tracked,1)=1 ORDER BY e.name,e.id")->fetchAll();
     }
+    public function lastWeeklyItems(int $actor): array
+    {
+        $this->permit($actor);
+        $payload=$this->access->repo->run("SELECT root.payload FROM finance_events root
+            WHERE root.target_type='stock_count' AND root.kind='count_started' AND root.actor_id=?
+            AND JSON_UNQUOTE(JSON_EXTRACT(root.payload,'$.purpose'))='Weekly Stock Count'
+            AND EXISTS (SELECT 1 FROM finance_events submitted WHERE submitted.target_type='stock_count'
+                AND submitted.target_id=CAST(root.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci
+                AND submitted.kind='count_submitted')
+            ORDER BY root.id DESC LIMIT 1",[$actor])->fetchColumn();
+        return $payload?array_keys(json_decode($payload,true,512,JSON_THROW_ON_ERROR)['items']):[];
+    }
+
     private function position(int $id):array{
         $r=$this->access->repo;$x=$r->run('SELECT e.id,e.name,e.stock_qty,COALESCE(s.tracked,1) tracked FROM extras e LEFT JOIN stay_extra_settings s ON s.extra_id=e.id WHERE e.id=?',[$id])->fetch();
         if(!$x||!$x['tracked'])throw new RuntimeException('This item is no longer tracked stock. Obtain an owner review.');
@@ -111,18 +124,28 @@ final class StockCountService
                 $this->permit($actor);$r=$this->access->repo;$prior=$r->run('SELECT * FROM finance_operations WHERE actor_id=? AND operation_key=?',[$actor,$key])->fetch();
                 if($prior){
                     if(!hash_equals($prior['fingerprint'],$fp))throw new RuntimeException('This form was used for different details.');
-                    $ev=$r->run("SELECT id,kind,target_id FROM finance_events WHERE id=? AND target_type='stock_count'",[$prior['event_id']])->fetch();if(!$ev)throw new RuntimeException('This operation belongs to another workflow.');
-                    $id=$ev['kind']==='count_started'?(int)$ev['id']:(int)$ev['target_id'];$this->access->audit($actor,'stockcount.replayed','stock_count',(string)$id,'recorded');return ['id'=>$id,'event_id'=>(int)$ev['id'],'replayed'=>true];
+                    $ev=$r->run("SELECT id,kind,target_id,payload FROM finance_events WHERE id=? AND target_type='stock_count'",[$prior['event_id']])->fetch();if(!$ev)throw new RuntimeException('This operation belongs to another workflow.');
+                    $id=$ev['kind']==='count_started'?(int)$ev['id']:(int)$ev['target_id'];$this->access->audit($actor,'stockcount.replayed','stock_count',(string)$id,'recorded');
+                    $payload=json_decode($ev['payload'],true,512,JSON_THROW_ON_ERROR);
+                    return ['id'=>$id,'event_id'=>(int)$ev['id'],'replayed'=>true]
+                        +array_intersect_key($payload,['next_item'=>true]);
                 }
-                [$id,$ev]=$this->command($actor,$action,$input);
+                $result=$this->command($actor,$action,$input);
+                [$id,$ev]=$result;
                 (new InventoryCostingService($this->access,$this->now()))->count($actor,$ev);
                 if($file)FinanceAttachment::save($this->access,$actor,'stockcount',$ev,$file);
                 $r->run('INSERT INTO finance_operations VALUES(?,?,?,?)',[$actor,$key,$fp,$ev]);
                 $this->access->audit($actor,'stockcount.'.$action,'stock_count',(string)$id,'succeeded',['event_id'=>$ev]);
-                return ['id'=>$id,'event_id'=>$ev,'replayed'=>false];
+                return ['id'=>$id,'event_id'=>$ev,'replayed'=>false]+($result[2]??[]);
             });
         }catch(Throwable $e){$this->access->audit($actor,'stockcount.failed','stock_count',null,'denied',['action'=>substr($action,0,32)]);throw $e;}
     }
+    private function openGuidedWindow(int $actor,int $id,int $item):void
+    {
+        $window=array_diff_key($this->position($item),['rows'=>true]);
+        $this->event($actor,'count_window',['extra_id'=>$item,'window'=>$window,'began_at'=>$this->now()],$id);
+    }
+
     private function command(int $actor,string $action,array $in):array{
         $r=$this->access->repo;
         if($action==='start'){
@@ -132,7 +155,11 @@ final class StockCountService
             $parent=isset($in['parent'])?$this->id($in['parent']):null;
             if($parent){$c=$this->load($actor,$parent);if((int)$c['root']['actor_id']!==$actor||$c['status']!=='recount')throw new RuntimeException('Only the original counter may start the requested recount.');$a=array_keys($c['lines']);$b=array_keys($items);sort($a);sort($b);if($a!==$b)throw new RuntimeException('Recount the same selected items.');}
             $purpose=R::text($in['purpose']??'',80,true);if(!in_array($purpose,['Weekly Stock Count','Shift Check','Investigate A Discrepancy'],true))throw new RuntimeException('Choose a count purpose.');
-            $id=$this->event($actor,'count_started',['items'=>$items,'purpose'=>$purpose,'comment'=>R::text($in['comment']??'',2000),'parent'=>$parent]);return [$id,$id];
+            $data=['items'=>$items,'purpose'=>$purpose,'comment'=>R::text($in['comment']??'',2000),'parent'=>$parent];
+            $transition=($in['guided']??'')==='1'?['next_item'=>(int)array_key_first($items)]:[];
+            $id=$this->event($actor,'count_started',$data+$transition);
+            if($transition)$this->openGuidedWindow($actor,$id,$transition['next_item']);
+            return [$id,$id,$transition];
         }
         $id=$this->id($in['id']??'');$c=$this->load($actor,$id);
         if(!hash_equals($c['version'],$in['version']??''))throw new RuntimeException('This count changed. Reload its current history.');
@@ -140,16 +167,30 @@ final class StockCountService
         if(in_array($action,['approve','dispute','recount'],true)){if(!$this->owner($actor))throw new PermissionDenied('Only the designated owner may decide stock counts.');}
         elseif(!$staff)throw new PermissionDenied('Only the original counter may perform this action.');
         $data=[];
+        $transition=[];
         if(in_array($action,['begin','finish'],true)){
             if(!in_array($c['status'],['counting','ready'],true))throw new RuntimeException('This count is no longer editable.');
             $extra=$this->id($in['extra_id']??'');if(!isset($c['lines'][$extra]))throw new RuntimeException('This item is outside the count scope.');
             $position=$this->position($extra);$window=array_diff_key($position,['rows'=>1]);
             if($action==='begin'){$data=['extra_id'=>$extra,'window'=>$window,'began_at'=>$this->now()];$kind='count_window';}
             else{
-                $line=$c['lines'][$extra];if(!isset($line['window'])||$this->hash($line['window'])!==$this->hash($window))throw new RuntimeException('Stock moved during this counting window. Begin this item again and physically recount it.');
+                $direction=$in['direction']??'';
+                if(!in_array($direction,['','next','pause'],true))throw new RuntimeException('Choose how to continue the count.');
+                $line=$c['lines'][$extra];
+                if($direction!==''&&!empty($line['complete']))throw new RuntimeException('This item is already saved. Begin it again to recount.');
+                if(!isset($line['window'])||$this->hash($line['window'])!==$this->hash($window))throw new RuntimeException('Stock moved during this counting window. Begin this item again and physically recount it.');
                 if(($in['confirmed']??'')!=='1')throw new RuntimeException('Confirm physical counting and separately held stock.');
                 $qty=R::quantity(R::text($in['qty']??'',24,true));
-                $data=['extra_id'=>$extra,'line'=>['qty'=>$qty,'note'=>R::text($in['note']??'',2000),'complete'=>true,'counted_at'=>$this->now()]];$kind='count_line';
+                $data=['extra_id'=>$extra,'line'=>['qty'=>$qty,'note'=>R::text($in['note']??'',2000),'complete'=>true,'counted_at'=>$this->now()]];
+                $kind='count_line';
+                if($direction==='next'){
+                    foreach($c['lines'] as $candidate=>$counted){
+                        if((int)$candidate!==$extra&&empty($counted['complete'])){
+                            $transition=['next_item'=>(int)$candidate];
+                            break;
+                        }
+                    }
+                }
             }
         }elseif($action==='submit'){
             if($c['status']!=='ready'||($in['confirmed']??'')!=='1')throw new RuntimeException('Finish every selected item and confirm the count before submitting.');
@@ -189,6 +230,8 @@ final class StockCountService
             }
             $kind='count_approved';$data=['decision'=>$decision,'self_review_exception'=>$exception,'lines'=>$snapshots];
         }else throw new RuntimeException('Unknown stock count action.');
-        return [$id,$this->event($actor,$kind,$data,$id)];
+        $event=$this->event($actor,$kind,$data+$transition,$id);
+        if($transition)$this->openGuidedWindow($actor,$id,$transition['next_item']);
+        return [$id,$event,$transition];
     }
 }
