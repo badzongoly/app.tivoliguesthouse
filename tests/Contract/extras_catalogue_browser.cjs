@@ -26,8 +26,13 @@ const root=path.resolve(__dirname,'../..'),evidence=fs.mkdtempSync(path.join(os.
    const shot=await page('Page.captureScreenshot',{format:'png'});
    fs.writeFileSync(path.join(evidence,'catalogue-'+width+'.png'),Buffer.from(shot.data,'base64'));
  }
- await nav(route+'&catalogue_status=inactive');
- await check('[...document.querySelectorAll("nav")].find(n=>n.getAttribute("aria-label")==="Catalogue Status").querySelector("[aria-current]").innerText==="Inactive"','Inactive items are one tap away');
+ await check('(()=>{const s=document.querySelector("select[name=catalogue_status]");return s.value==="active"&&[...s.options].map(o=>o.value).join(",")==="active,inactive,all"&&!Array.from(document.querySelectorAll("nav")).some(n=>n.getAttribute("aria-label")==="Catalogue Status");})()','Item status is a list filter with Active selected by default');
+ await ev('(()=>{const s=document.querySelector("select[name=catalogue_status]"); s.value="inactive"; s.form.requestSubmit();})()');
+ for(let i=0;i<150;i++){
+   await wait(100);
+   if(await ev('document.readyState==="complete"&&new URL(location.href).searchParams.get("catalogue_status")==="inactive"')) break;
+ }
+ await check('document.querySelector("select[name=catalogue_status]").value==="inactive"&&[...document.querySelectorAll(".catalogue-status")].every(s=>s.innerText.includes("Inactive"))','Applying the status filter shows only inactive items');
  await nav(route+'&catalogue_status=all&q=NoSyntheticProductMatchesThis');
  await check('!document.querySelector("[data-extra-id]") && document.body.innerText.includes("No items match these filters.")','Search shows a clear empty state');
  await nav(route+'&catalogue_status=all&sort=stock-low');

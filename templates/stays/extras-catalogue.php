@@ -25,12 +25,6 @@ if(!empty($view['extras'])){
         <?php if(!empty($canEditExtras)&&$form!=='extra_save')$link('Add Extra',$catalogueList+['form'=>'extra_save'],'');?>
     </div>
     <?php if(empty($canEditExtras)):?><p class="stay-help">View Only · An administrator can change catalogue items.</p><?php endif?>
-    <nav class="app-section-nav" aria-label="Catalogue Status">
-        <?php foreach(['active'=>'Active','inactive'=>'Inactive','all'=>'All Items'] as $value=>$label):?>
-        <a href="<?=$url(array_replace($catalogueList,['catalogue_status'=>$value,'catalogue_page'=>1]))?>#extras-catalogue"
-           <?=$catalogueQuery['catalogue_status']===$value?'aria-current="page"':''?>><?=$label?></a>
-        <?php endforeach?>
-    </nav>
     <form class="extras-catalogue-filters" method="get" action="<?=access_h(stay_url())?>#extras-catalogue">
         <input type="hidden" name="section" value="extras">
         <input type="hidden" name="tab" value="catalogue">
@@ -41,7 +35,11 @@ if(!empty($view['extras'])){
             <option value="<?=access_h($category)?>" <?=$catalogueQuery['category']===$category?'selected':''?>><?=access_h($category)?></option>
             <?php endforeach?>
         </select></label>
-        <input type="hidden" name="catalogue_status" value="<?=access_h($catalogueQuery['catalogue_status'])?>">
+        <label>Item Status<select name="catalogue_status">
+            <?php foreach(['active'=>'Active','inactive'=>'Inactive','all'=>'All Items'] as $value=>$label):?>
+            <option value="<?=$value?>" <?=$catalogueQuery['catalogue_status']===$value?'selected':''?>><?=$label?></option>
+            <?php endforeach?>
+        </select></label>
         <label>Sort By<select name="sort">
             <?php foreach(['name'=>'Item Name','stock-low'=>'Available Stock: Low to High','stock-high'=>'Available Stock: High to Low'] as $value=>$label):?>
             <option value="<?=$value?>" <?=$catalogueQuery['sort']===$value?'selected':''?>><?=$label?></option>
