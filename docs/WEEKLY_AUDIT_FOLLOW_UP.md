@@ -1,6 +1,6 @@
 # Weekly Audit Follow-Up
 
-Owner-approved scope: one follow-up view within Property & Audits, extending the existing Room Audits and Other Area Audits. No separate ticket menu, financial posting, automatic messages or new repair-release inspection.
+Owner-approved scope: one follow-up view within Property & Audits, extending the existing Room Audits and Other Area Audits. No separate ticket menu, financial posting or new repair-release inspection.
 
 ## Normal use
 
@@ -11,6 +11,12 @@ Owner-approved scope: one follow-up view within Property & Audits, extending the
 5. Eugene checks the work and chooses **Verify & Close**, or **Return For Rework** with an explanation. Return before changing an assignment awaiting verification. Reassignment/deadline revisions require a reason and preserve previous deadlines and completion claims.
 
 Open work carries across weeks; overdue is derived from the current deadline and status. Room/area audit registers default to the current UTC Monday–Sunday week and offer All Weeks. A later Pass never closes earlier unresolved work. A repeated finding explicitly linked while work awaits verification returns it to the assigned person, retaining their previous completion evidence.
+
+All audit writes use the shared confirmation modal. Review the action, then confirm once; Go Back, Escape or close cancels without recording it. The background stays inactive until the modal closes. Housekeeping is managed from Check-In & Occupancy rather than this property navigation.
+
+## If only Follow-Ups is visible
+
+Audit entry is separate from follow-up completion. A clerk without Audit Duty sees only Follow-Ups and an Audit Duty Required explanation. Eugene opens **Audit Duty**, selects the actual staff account and records **Assign Audit Duty** with a reason. The staff member then reopens this page; **Record Room Audit** and **Record Area Audit** are available directly on the landing page, as well as the registers. No role upgrade is needed. Existing assigned work can still be completed without granting audit entry. Only Eugene assigns deadlines and verifies or returns work. A passing audit has no follow-up to assign.
 
 ## Safety and existing repair
 
@@ -30,7 +36,7 @@ The configured finance owner is the authority; names never grant permission. Act
 
 All writes use PDO and the existing shared `security_state` transaction lock. Per-actor operation keys and input fingerprints survive retries; a changed retry is rejected. `finance_claims` provides a unique original-audit-to-follow-up association. Version checks include linked safety facts. Required audit, operational journal, source link and operation identity commit together or roll back. Operational journal entries have zero amount and do not post revenue, expenses, receipts, stock or payroll.
 
-Evidence is validated by content and size, encrypted outside the public directory and downloadable only through a committed completion record after current task authorization. A rolled-back encrypted orphan is not registered or downloadable. On an uncertain submission outcome, retry the same form/key and the same evidence file; do not start a new form or silently remove the file. No outside notification/provider integration is enabled.
+Evidence is validated by content and size, encrypted outside the public directory and downloadable only through a committed completion record after current task authorization. A rolled-back encrypted orphan is not registered or downloadable. On an uncertain submission outcome, retry the same form/key and the same evidence file; do not start a new form or silently remove the file. In-app reminders link back to the original task. Optional Email/WhatsApp delivery uses the separate Reminders & Escalations settings; recording an audit does not itself enable those channels.
 
 ## Setup and recovery
 
@@ -39,3 +45,10 @@ Uses the existing activated occupancy, finance and HR private-evidence configura
 Retain journal, source claims, operation identities, audit and encrypted evidence during recovery. Do not revert to an old writer that permits unverified completion. Disable affected audit writes if necessary and forward-repair while preserving original and later records. Production release/backup restore remains a separate target-specific decision.
 
 See the 21 November weekly-audit delivery change record for executed evidence and limits.
+
+
+Verified again on 22 November 2026. See [workflow review and executed evidence](delivery/changes/2026-11-22-weekly-audits-review.md).
+
+## Shared property navigation — 22 November 2026
+
+Room administration and weekly audit views now share one permission-aware tab row, including the owner's single Audit Duty entry. Legacy register creation links open the canonical audit form, while original saved routes/history stay supported. Room preparation remains in Check-In & Occupancy. See [Property & Audits workflow map](PROPERTY_AUDITS_WORKSPACE.md).

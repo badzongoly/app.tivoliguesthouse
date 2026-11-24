@@ -7,7 +7,7 @@ Open **Finance & Cash > Purchase Requests**. Use your individual account.
 1. Choose New Request. Select Operating Expense, Stock Purchase or Service Provider. Describe what is needed, supplier/contact, purpose, estimate and expected Cash/MoMo method. Quote evidence is optional.
 2. Submit for Eugene's approval. Approval sets a spending limit; it does not record an expense or payment.
 3. Record commitment only after approval. If scope or estimate changes, request a revised decision before further commitment.
-4. Record the complete delivery, actual cost and original activity date. Attach the receipt if available; otherwise explain the alternative evidence. This version supports one complete delivery, not partial deliveries.
+4. Record the complete delivery, actual cost and original activity date. The Goods Received / Work Completed description is optional on this form. Confirm full receipt and attach the receipt if available; otherwise explain the alternative evidence. This version supports one complete delivery, not partial deliveries.
 5. If already paid, declare the actual payer, method, date and reference honestly. This is unverified until Eugene confirms it. Confirmation records the existing payment; nobody should pay it again.
 6. Follow the status and Activity history. If disputed, append a clarification. The original declaration remains visible.
 
@@ -15,7 +15,7 @@ Only the requester and configured finance owner can read private purchase detail
 
 ## Eugene's workflow
 
-Use Owner Review Queue to approve a cap, reject, decide a proposed revision, or review delivery and actual cost. Review any overrun or payment predating approval as an explicit after-the-fact exception; never backdate approval. Confirming cost creates one expense. For stock purchases it also adds the delivered stock once, in the same transaction.
+Use Owner Review Queue to approve a cap, reject, decide a proposed revision, or review delivery and actual cost. The reason on Review Spending Approval is optional for approval and rejection. Any reason entered is kept in Activity. Review any overrun or payment predating approval as an explicit after-the-fact exception; never backdate approval. Confirming cost creates one expense. For stock purchases it also adds the delivered stock once, in the same transaction.
 
 Review an already-paid declaration before confirming it. Otherwise use Payment to record actual full or partial Cash/MoMo settlement. Check remaining due and actual date before confirming. Each partial settlement remains visible; recording payment never creates a second expense.
 

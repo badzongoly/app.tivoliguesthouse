@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/historical_momo_fixture.php';
 use Tivoli\Repository\ReceiptAccounting as A;
 // The included harness verifies the isolated server, database and marker before fixtures.
 define('RECONCILIATION_HELPERS_ONLY',true);require __DIR__.'/receipt_reconciliation.php';
@@ -18,7 +19,7 @@ freshCash();$p=ap();$support=ap('20.00');$d=dep();$dc=reportSource('deposit',$d)
 
 freshCash();$p=ap();$keeper=ap();$d=dep();$case=ar($p,['type'=>'duplicate','keeper_id'=>(string)$keeper])['id'];apost($case);aa(A::collection($r,$p)===$keeper&&rowCash($keeper)['reserved']===50000,'deposited duplicate retains actual keeper and one full deposit');
 
-freshCash();$reference='DUP-'.ak();$p=ap('500.00','momo',null,$reference);$keeper=ap('500.00','momo',null,$reference);$f->execute($owner,'receipt_match',['id'=>(string)$p,'type'=>'payment','amount'=>'500.00','reference'=>'DUP-PROOF-'.ak(),'evidence'=>'Synthetic unique merchant credit','verified'=>'1'],ak());$case=ar($p,['type'=>'duplicate','keeper_id'=>(string)$keeper])['id'];apost($case);aa(A::collection($r,$p)===$keeper&&\Tivoli\Domain\Finance\CashResolution::position('payment',$keeper,50000,$f->events())['verified']===50000,'matched duplicate moves proof to actual keeper without second credit');
+freshCash();$reference='DUP-'.ak();$p=ap('500.00','momo',null,$reference);$keeper=ap('500.00','momo',null,$reference);historicalMoMoMatch($r,$owner,['id'=>(string)$p,'type'=>'payment','amount'=>'500.00','reference'=>'DUP-PROOF-'.ak(),'evidence'=>'Synthetic unique merchant credit','verified'=>'1'],$clock);$case=ar($p,['type'=>'duplicate','keeper_id'=>(string)$keeper])['id'];apost($case);aa(A::collection($r,$p)===$keeper&&\Tivoli\Domain\Finance\CashResolution::position('payment',$keeper,50000,$f->events())['verified']===50000,'matched duplicate moves proof to actual keeper without second credit');
 
 freshCash();$p=ap();$support=ap();dep();$case=ar($p,['type'=>'method','method'=>'momo','reference'=>'CORRECT-MOMO-'.ak(),'cash_support_id'=>(string)$support])['id'];apost($case);aa(A::position($r,$p)['position']['method']==='momo'&&rowCash($support)['reserved']===50000,'Cash to MoMo preserves actual cash deposit using real cash funding');aa(\Tivoli\Domain\Finance\CashResolution::position('payment',$p,50000,$f->events())['verified']===0,'recording method correction never fabricates bank verification');
 

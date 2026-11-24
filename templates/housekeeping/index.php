@@ -1,6 +1,6 @@
 <?php require dirname(__DIR__).'/layouts/start.php'; ?>
 <link rel="stylesheet" href="<?=access_h(access_url('assets/css/housekeeping.css'))?>"><script src="<?=access_h(workspace_asset_url('assets/js/housekeeping.js'))?>" defer></script>
-<div class="housekeeping"><header class="app-page-heading-row"><div><p class="app-eyebrow">GUEST OPERATIONS</p><h1>Check-In &amp; Occupancy</h1></div></header>
+<div class="housekeeping">
 <?php require dirname(__DIR__).'/stays/workspace-nav.php';?>
 <div id="stay-workspace" tabindex="-1"></div>
 <?php require dirname(__DIR__).'/stays/preparation-nav.php';?>
@@ -12,7 +12,7 @@
 <div id="housekeeping-action" tabindex="-1">
 <?php if(!in_array(http_response_code(),[403,503],true)): ?>
 <?php if($room):$c=$case;$f=$room['facts'];$d=$c['root']['data']??null;$extra=$c?['id'=>(string)$c['root']['id'],'version'=>$c['version']]:[];$cleaner=$c&&(int)$c['root']['actor_id']===$actor;$roomNumber=$f['id']??$d['room_id'];$roomName=$f['name']??$d['room_name'];$canStart=!$readOnly&&$f&&!$f['blocked']&&!$f['occupied']&&in_array([$f['status'],$f['ready_state']],[['dirty','cleaning'],['dirty','awaiting_inspection'],['vacant','unverified']],true)&&(!$c||!$c['valid']||in_array($c['status'],['returned','released','superseded'],true));?>
-<section class="card"><div class="hk-row"><h2>Room <?=access_h($roomName)?></h2><span class="hk-badge"><?=access_h($readOnly?h_attempt_status($c['status']):h_status($room))?></span></div>
+<?php if($form!=='clean'):?><section class="card"><div class="hk-row"><h2>Room <?=access_h($roomName)?></h2><span class="hk-badge"><?=access_h($readOnly?h_attempt_status($c['status']):h_status($room))?></span></div>
 <?php if($c):?><p>Attempt #<?=(int)$c['root']['id']?> · Cleaner <?=access_h($c['root']['actor_name'])?> · <?=access_h(h_attempt_status($c['status']))?></p><p>Started <?=access_h(display_date($c['root']['created_at']))?> UTC</p>
 <?php if(!$c['current']):?><p>This is an earlier attempt.</p><?php if(!$readOnly&&$room['latest'])h_link('Current Attempt',['id'=>$room['latest']]); ?>
 <?php elseif(!$c['valid']&&!in_array($c['status'],['released','superseded'],true)):?><p class="error">Room occupancy or safety facts changed. This attempt cannot release the room. Original evidence is retained.</p><?php endif?>
@@ -28,9 +28,9 @@
 <?php else:?><span class="hk-badge">Exception <?=access_h($c['exception']['status'])?></span><?php endif?>
 <?php endif;endif;endif?>
 <?php if(!$readOnly&&$owner&&$c&&$c['current']&&in_array($c['status'],['cleaning','inspection'],true)&&$form!=='restart')h_link('Restart Abandoned Attempt',['id'=>$c['root']['id'],'form'=>'restart']);?>
-</div></section>
+</div></section><?php endif?>
 <?php if($readOnly):?><p>This is the cleaning record linked to Stay #<?=$fromStay?>. Current room work is managed from the Room Board.</p><?php if($stayNavCanViewStays):?><a class="hk-button" href="<?=access_h(stay_url(['booking_id'=>$fromStay]))?>#stay-bill">Back To Guest Stay Account</a><?php endif;endif?>
-<?php if($form&&$c)require __DIR__.'/form.php';if($c)require __DIR__.'/history.php'; ?>
+<?php if($form&&$c)require __DIR__.'/form.php';if($c&&$isAdmin&&$form!=='clean')require __DIR__.'/history.php'; ?>
 <?php elseif($page==='owner'): ?>
 <section class="card"><h2>Self-Inspection Requests</h2><?php foreach($attention['requests']??[] as $row):?><article class="hk-item"><h3>Room <?=access_h($row['root']['data']['room_name'])?> · <?=access_h($row['root']['actor_name'])?></h3><p><?=access_h($row['exception']['data']['reason'])?></p><?php h_link('Review Request',['id'=>$row['root']['id'],'form'=>'decision']);?></article><?php endforeach;if(empty($attention['requests'])):?><p>No pending exception requests.</p><?php endif?></section>
 <section class="card"><h2>Follow-Up Reviews</h2><?php foreach($attention['followups']??[] as $row):?><article class="hk-item"><h3>Room <?=access_h($row['case']['root']['data']['room_name'])?> · Attempt #<?=(int)$row['case']['root']['id']?></h3><p><?=access_h($row['inspection']['actor_name'].' · '.display_date($row['inspection']['created_at']))?> UTC</p><?php h_link('Review Self-Inspection',['id'=>$row['case']['root']['id'],'form'=>'followup','inspection_id'=>$row['inspection']['id']]);?></article><?php endforeach;if(empty($attention['followups'])):?><p>No self-inspections awaiting review.</p><?php endif?></section>

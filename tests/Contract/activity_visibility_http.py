@@ -26,8 +26,8 @@ def probes(body):
 for who,browser,n in [('Non-admin',clerk,1),('Admin',admin,3)]:
  status,body=browser.get('/occupancy.php?booking_id='+str(fixture['booking'])+'&tab=activity')
  entries=probes(body)
- check(status==200 and len(entries)==n,who+' guest Activity has correct actor scope')
- if who=='Non-admin':check(entries[0]['source']=='own','Direct guest URL cannot expose another actor')
+ if who=='Non-admin':check(status==403 and not entries,'Direct Stay Activity is restricted to admins')
+ else:check(status==200 and len(entries)==n,'Admin Stay Activity retains all recorded actors')
  status,body=browser.get('/occupancy.php?section=activity&actor='+str(fixture['admin']))
  actors=re.findall(r'<small>User #(\d+)</small>',body)
  check(status==200 and bool(actors) and (who=='Admin' or all(int(a)==fixture['clerk'] for a in actors)),who+' operational activity ignores forged actor scope')

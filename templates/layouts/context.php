@@ -30,7 +30,7 @@ function workspace_context(array $actor): array {
         'payments.php'=>['Payments','Guest payments and booking balances.'],
         'expenses.php'=>['Finance & Cash','Record spending and follow approvals.'],
         'reports.php'=>['Reports','Review guesthouse performance.'],
-        'owner_reports.php'=>['Owner Reports','Visual reports for rooms, receipts, extras and expenses.'],
+        'owner_reports.php'=>['Dashboard','Visual reports for rooms, receipts, extras and expenses.'],
         'users.php'=>['System Access','Individual accounts, roles and privileges.'],
         'audit.php'=>['Audit Trail','Who did what, and when. All times are UTC.'],
         'admin_recovery.php'=>['Historical Recovery','Restricted historical recording workspace.'],

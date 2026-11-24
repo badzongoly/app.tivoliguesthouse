@@ -1,4 +1,4 @@
-(()=>{'use strict';const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;const focusAction=()=>{if(document.querySelector('dialog[open]'))return;const target=document.getElementById(location.hash.slice(1))||document.querySelector('.error');if(!target)return;target.scrollIntoView({behavior:reduced?'instant':'smooth',block:'start'});const field=target.querySelector('input:not([type=hidden]),select,textarea,button');(field||target).focus({preventScroll:true});};window.addEventListener('pageshow',()=>setTimeout(focusAction,30));window.addEventListener('hashchange',()=>setTimeout(focusAction,30));document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',()=>{const b=form.querySelector('button[type=submit],button:not([type])');if(b){b.setAttribute('aria-busy','true');setTimeout(()=>b.removeAttribute('aria-busy'),4000);}}));})();
+(()=>{'use strict';const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;const focusAction=()=>{if(document.querySelector('dialog[open]'))return;const target=document.getElementById(location.hash.slice(1))||document.querySelector('.error');if(!target)return;target.scrollIntoView({behavior:reduced?'instant':'smooth',block:'start'});const field=target.querySelector('input:not([type=hidden]),select,textarea,button');(target.id==='stay-bill'?target:(field||target)).focus({preventScroll:true});};window.addEventListener('pageshow',()=>setTimeout(focusAction,30));window.addEventListener('hashchange',()=>setTimeout(focusAction,30));document.querySelectorAll('form').forEach(form=>form.addEventListener('submit',()=>{const b=form.querySelector('button[type=submit],button:not([type])');if(b){b.setAttribute('aria-busy','true');setTimeout(()=>b.removeAttribute('aria-busy'),4000);}}));})();
 
 (()=>{'use strict';const form=document.querySelector('[data-cleaning-wizard]');if(!form)return;
 const steps=[...form.querySelectorAll('[data-cleaning-step]'),form.querySelector('[data-cleaning-review]')];
@@ -98,7 +98,9 @@ form.addEventListener('change',()=>show(false));show(false);
     const panel = document.querySelector('[data-room-search-panel]');
     if (!panel) return;
     const rooms = [...document.querySelectorAll('#stay-room-grid .stay-room')];
-    if (!rooms.length) return;
+    const filter = panel.querySelector('[data-room-filter]');
+    const empty = document.querySelector('[data-room-filter-empty]');
+    panel.querySelector('[data-room-search-field]').hidden = false;
     const entries = rooms.map(room => ({
         room,
         search: [...room.querySelectorAll('h2,h3')].map(name => name.textContent.trim().toLocaleLowerCase()).join(' ')
@@ -109,12 +111,61 @@ form.addEventListener('change',()=>show(false));show(false);
         const terms = search.value.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
         let shown = 0;
         for (const entry of entries) {
-            entry.room.hidden = !terms.every(term => entry.search.includes(term));
+            const matchesStatus = filter.value === 'all' || entry.room.dataset.preparation === filter.value;
+            entry.room.hidden = !matchesStatus || !terms.every(term => entry.search.includes(term));
             if (!entry.room.hidden) shown++;
         }
-        status.textContent = terms.length ? shown ? shown + ' matching room' + (shown===1?'':'s') : 'No rooms match your search.' : '';
+        status.textContent = terms.length || filter.value !== 'all' ? shown + ' matching room' + (shown===1?'':'s') : '';
+        empty.hidden = shown !== 0;
     };
     search.addEventListener('input', render);
     addEventListener('pageshow',render);
-    panel.hidden = false;
+    filter.addEventListener('change', () => {
+        const url = new URL(location.href);
+        if (filter.value === 'all') url.searchParams.delete('preparation');
+        else url.searchParams.set('preparation', filter.value);
+        history.replaceState(history.state, '', url);
+        render();
+    });
+    panel.addEventListener('submit', event => event.preventDefault());
+    render();
 })();
+
+(() => {
+    const feedback = document.querySelector('[data-extra-feedback]');
+    if (!feedback) return;
+    setTimeout(() => {
+        feedback.classList.add('stay-feedback-dismissed');
+        setTimeout(() => { feedback.hidden = true; }, 250);
+    }, 4200);
+})();
+
+document.querySelectorAll('[data-start-cleaning]').forEach(form => {
+    const button = form.querySelector('button');
+    const error = form.querySelector('[data-cleaning-start-error]');
+    const token = form.elements.room_token;
+    let loading = false;
+    form.addEventListener('submit', async event => {
+        if (token.value) return;
+        event.preventDefault();
+        if (loading) return;
+        loading = true;
+        button.disabled = true;
+        error.hidden = true;
+        try {
+            const response = await fetch(form.dataset.startCleaning, {cache:'no-store'});
+            const data = await response.json();
+            if (!response.ok || !/^[a-f0-9]{64}$/.test(data.token || '')) throw new Error();
+            token.value = data.token;
+            form.dataset.confirm = form.dataset.startConfirm;
+        } catch {
+            error.textContent = 'Room details could not be checked. Reload and try again.';
+            error.hidden = false;
+        } finally {
+            loading = false;
+            button.disabled = false;
+        }
+        if (token.value) form.requestSubmit(button);
+    });
+    form.hidden = false;
+});

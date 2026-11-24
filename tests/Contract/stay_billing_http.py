@@ -48,9 +48,9 @@ echo json_encode(['room_id'=>$room,'extra_id'=>(int)$r->db->lastInsertId()],JSON
 fixture.update(json.loads(subprocess.run(['C:/xampp/php/php.exe','-r',setup],cwd=ROOT,capture_output=True,text=True,encoding='utf-8',check=True).stdout))
 path='/occupancy.php?form=checkin&room_id='+str(fixture['room_id'])
 body=clerk.request(path)[2]
-check('Room Payment Received' in body and 'Confirm Check-In &amp; Record Receipt' in body,'arrival form exposes combined receipt action')
+check('Room Payment Received' in body and 'Confirm Check-In &amp; Record Payment' in body,'arrival form exposes combined receipt action')
 fields=clerk.fields(path)
-payload=fields|dict(action='checkin',room_id=fixture['room_id'],guest_name='Synthetic paid HTTP '+secrets.token_hex(3),phone='0000000000',gender='Female',nationality='Ghana',stay_type='short',payment_type='momo',amount='149.99',expected_rate='150.00',identity_verified='1',payment_attested='1',room_checked='1',reference='PAID-HTTP-'+secrets.token_hex(6))
+payload=fields|dict(action='checkin',room_id=fixture['room_id'],guest_name='Synthetic paid HTTP '+secrets.token_hex(3),phone='0000000000',gender='Female',nationality='Ghana',stay_type='short',payment_type='momo',amount='149.99',expected_rate='150.00',attest='1',reference='PAID-HTTP-'+secrets.token_hex(6))
 check(clerk.request(path,payload)[0]==400,'underpaid arrival rejected through endpoint')
 payload['amount']='150.00'
 status,headers,_=clerk.request(path,payload)
@@ -71,7 +71,7 @@ check(other.request(checkout,other.fields(checkout)|approval|dict(csrf=other.fie
 check(owner.request(checkout,approval|dict(reason=''))[0]==400,'owner reason required through endpoint')
 check(owner.request(checkout,approval)[0]==302,'owner approval succeeds')
 check('>Confirm Departure<' in clerk.request(checkout)[2],'owner approval enables clerk departure')
-out=clerk.fields(checkout)|dict(action='checkout',booking_id=booking,extras_checked='1',keys_returned='1',reason='')
+out=clerk.fields(checkout)|dict(action='checkout',booking_id=booking,attest='1',reason='')
 status,headers,_=clerk.request(checkout,out)
 check(status==302 and 'confirm=' in headers.get('Location',''),'unpaid departure requires confirmation')
 confirm=headers['Location'].replace(BASE,'').split('#')[0]

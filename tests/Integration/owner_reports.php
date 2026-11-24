@@ -108,6 +108,23 @@ $before = $hash();
 $read = static fn(string $view,array $filters=[])=>$repo->read(OwnerReports::filters($filters+['view'=>$view,'start'=>$start,'end'=>$end],$asOf));
 $daily = $read('daily',['end'=>$start]);
 check((int)$daily['payment']['minor']===102000 && (int)$daily['payment']['count']===3,'daily guest receipts count independently of 501 extra lines');
+$default = OwnerReports::filters([], $asOf);
+check($default['start']===$asOf->format('Y-m-d') && $default['end']===$default['start']
+    && $default['until']===$asOf->format('Y-m-d H:i:s'), 'Daily Overview defaults to the property date and stops at report time');
+$r->run("INSERT INTO rooms(name,type,rate,status) VALUES(?,'Standard','100.00','vacant')",['Synthetic historical occupancy '.$tag]);
+$historicalRoom = (int)$r->db->lastInsertId();
+$addStay($historicalRoom,'checked_out','overnight',$start.' 17:00:00',$day->modify('+1 day')->format('Y-m-d').' 00:00:00');
+$r->run("INSERT INTO rooms(name,type,rate,status) VALUES(?,'Standard','100.00','occupied')",['Synthetic later occupancy '.$tag]);
+$laterRoom = (int)$r->db->lastInsertId();
+$addStay($laterRoom,'active','overnight',$next.' 08:00:00',null);
+$historicalRooms = array_column($read('daily',['end'=>$start])['rooms'],null,'id');
+check((int)$historicalRooms[$historicalRoom]['active']===1 && !isset($historicalRooms[$laterRoom]),
+    'historical occupancy includes a stay departing at the next midnight and excludes a later arrival');
+check(!isset(array_column($read('daily',['end'=>$mid])['rooms'],null,'id')[$historicalRoom]),
+    'historical occupancy excludes the stay after its departure');
+$todayRooms = array_column($repo->read($default)['rooms'],null,'id');
+check($todayRooms[$laterRoom]['status']==='occupied' && (int)$todayRooms[$laterRoom]['active']===1,
+    'today still shows current room readiness and occupancy');
 $cash = $read('cash');
 $detailRows=static fn(string $view,string $detail,array $filters=[])=>$read($view,['detail'=>$detail]+$filters)['detail']['rows'];
 $detailRefunds=$detailRows('cash','refunds',['method'=>'card']);
@@ -129,7 +146,7 @@ foreach ($detailRows('cash','momo') as $match) {
 }
 ksort($detailMoMo);
 check($detailMoMo===array_map('intval',array_column($cash['momo'],'minor','coverage')),'MoMo details reconcile by matching coverage');
-check(count($detailRows('daily','momo',['end'=>$start]))===(int)$daily['pending'],'daily pending details match the daily review count');
+check(count($detailRows('daily','momo',['end'=>$start]))===(int)$daily['pending'],'daily difference details match the daily exception count');
 check(array_sum(array_column($detailRows('daily','room-charges',['end'=>$after]),'minor'))===90000,'departure detail reconciles and excludes service rooms');
 check(count($detailRows('daily','arrivals',['end'=>$mid]))===(int)$read('daily',['end'=>$mid])['stayCounts']['arrivals'],'arrivals reconcile to daily count');
 check(count($detailRows('daily','departures',['end'=>$after]))===(int)$read('daily',['end'=>$after])['stayCounts']['departures'],'departures reconcile to actual departure count');
@@ -150,7 +167,7 @@ $custody = $cash['custody']['rows'][0];
 check((int)$custody['receipts']===42000 && (int)$custody['held']===27000 && (int)$custody['transit']===5000
     && (int)$custody['confirmed']===10000,'cash cohort reconciles held, in transit and wallet confirmed without deducting refunds');
 $coverage = array_map('intval',array_column($cash['momo'],'minor','coverage'));
-check($coverage===['Awaiting review'=>17000,'Matched by staff'=>48000],'MoMo buckets use source links and keep advances in recorded receipts');
+check($coverage===['Matched by staff'=>48000,'Recorded as successful'=>17000],'MoMo buckets use source links and keep advances in recorded receipts');
 check($read('cash',['method'=>'card'])['page']['count']===1,'receipt method filter changes detail and summary');
 $roomData = $read('room',['room'=>(string)$room]);
 check($roomData['occupied']===7 && count($roomData['byRoom'][$room])===7,'active overnight stay contributes only clipped elapsed nights');
@@ -170,5 +187,9 @@ $expenseTotal = array_sum(array_column($monthly['categories'],'minor'));
 check(count($monthly['months'])===6 && $expenseTotal===(int)$monthly['months'][$month]['expenses'],
     'six-month comparison and selected category totals reconcile');
 check((int)array_column($monthly['categories'],'minor','name')['Synthetic report '.$tag]===1135,'expense categories use exact business-date amounts');
+$r->run("INSERT INTO finance_events(kind,target_type,target_id,amount_minor,effective_date,actor_id,payload,created_at)
+    VALUES('cd_reported','discrepancy','synthetic',0,?,1,?,?)",[$next,json_encode(['source_type'=>'payment','source_id'=>$payments[2]],JSON_THROW_ON_ERROR),$next.' 12:00:00']);
+check((int)$read('daily',['end'=>$start])['pending']===0 && !$read('daily',['end'=>$start,'detail'=>'momo'])['detail']['rows'],
+    'a MoMo discrepancy reported later does not change the historical day or its detail');
 check($before===$hash(),'report reads preserve financial rows byte for byte');
 

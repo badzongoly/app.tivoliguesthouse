@@ -12,15 +12,15 @@ stay_input('Discovered At (UTC)','discovered_at',$nowUtc,'datetime-local',true,'
 stay_input('Actual Departure At (UTC, If Known)','actual_departed_at','','datetime-local',false,'step="1"');
 stay_textarea('What Happened','reason','',true);?>
 <label class="stay-field">Supporting Evidence (Optional)<input type="file" name="evidence" accept=".pdf,.jpg,.jpeg,.png"><small>PDF, JPEG or PNG · Maximum 2 MB · Private</small></label>
-<?php stay_check('I Verified That the Room Is Vacant','vacant');stay_check('Keys Recovered or Access Secured','secured');?>
-<p>Verified vacancy and secured access allow cleaning. Otherwise the room stays blocked until staff verify both.</p>
-<div class="stay-actions"><button class="button">Report Guest Departure</button><?php $link('Cancel',['booking_id'=>$bookingId]);?></div></form>
+<ul class="stay-reminders"><li>I Verified That The Room Is Vacant</li><li>Keys Recovered Or Access Secured</li></ul>
+<p>Verify vacancy and secure access before releasing the room for cleaning. The room stays blocked until security verification is recorded.</p>
+<div class="stay-actions stay-form-actions"><button class="button">Report Guest Departure</button><?php $link('Cancel',['booking_id'=>$bookingId]);$cancelRendered=true;?></div></form>
 <?php elseif($form==='secure_departure_room'&&$departureCase&&!$departureCase['secured']&&$departureCase['status']!=='retracted'):?>
 <form method="post" class="stay-form" data-confirm="Confirm the room is vacant and access is secured?">
 <?php stay_fields('secure_departure_room',$bookingId);
-stay_check('I Verified That the Room Is Vacant','vacant',true);stay_check('Keys Recovered or Access Secured','secured',true);
 stay_textarea('Vacancy / Access Check','reason','',true);?>
-<div class="stay-actions"><button class="button">Record Security Verification</button><?php $link('Cancel',['booking_id'=>$bookingId]);?></div></form>
+<ul class="stay-reminders"><li>I Verified That The Room Is Vacant</li><li>Keys Recovered Or Access Secured</li></ul>
+<div class="stay-actions stay-form-actions"><button class="button" type="submit" name="attest" value="1">Record Security Verification</button><?php $link('Cancel',['booking_id'=>$bookingId]);$cancelRendered=true;?></div></form>
 <?php elseif($form==='review_departure'&&$pendingCase&&$canAuthorizeDeparture):?>
 <?php if(!$departurePreview):?>
 <form method="post" class="stay-form">

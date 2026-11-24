@@ -7,7 +7,7 @@ $ownerHome=getenv('TIVOLI_OWNER_REPORTS') !== '0'
     && in_array('admin',$workspace['roles'],true) && in_array('reports.view',$workspace['permissions'],true);
 $home=$ownerHome?'owner_reports.php':'dashboard.php';
 $groups=[
- 'Overview'=>[$ownerHome?[$home,'Owner Reports','reports.view','report']:[$home,'Today','dashboard.view','today']],
+ 'Overview'=>[$ownerHome?[$home,'Dashboard','reports.view','report']:[$home,'Today','dashboard.view','today']],
  'Guest Operations'=>[[in_array('bookings.manage',$workspace['permissions'],true)?'bookings.php':'occupancy.php?section=housekeeping','Check-In & Occupancy','bookings.manage|rooms.manage','stays'],['handover.php','Shift Handover','bookings.manage','audit'],['weekly-audits.php','Property & Audits','bookings.manage|rooms.manage','rooms'],[$extrasMenu,'Extras & Stock','extras.manage|sales.view|stock.manage','extras']],
  'Money & Review'=>[[$financeMenu,'Finance & Cash','bookings.manage|expenses.submit|expenses.manage|expenses.approve|reports.view|payments.view','money'],['reports.php','Reports','reports.view','report']],
  'Administration'=>[['payroll.php',((new \Tivoli\Service\FinanceService(access_service()))->canPostLate((int)$user['id'])&&in_array('hr.salary',$workspace['permissions'],true))?'Payroll & Payslips':'My Payslips','hr.salary|hr.self','money'],['staff.php','Staff & HR','hr.view|hr.self','users'],['hr-settings.php','Settings','hr.settings','audit'],['users.php','System Access','users.manage|roles.manage|roles.assign|privileges.manage','users'],['audit.php','Audit Trail','audit.view','audit'],['admin_recovery.php','Historical Recovery','recovery.manage','audit']],

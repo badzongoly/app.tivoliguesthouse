@@ -4,12 +4,11 @@ Open **Extras & Stock > Stock Counts & Variance Review**.
 
 ## Count stock
 
-1. Select Start Count, choose the purpose and up to 50 tracked items. Inactive tracked items can still be counted.
-2. For each item, select Begin Counting immediately before physically counting it. Count saleable quantities in the shared stock locations. Describe damaged/expired quantities held separately in the optional Count Note; keep those goods secured.
-3. Enter the actual quantity and save. Quantities support hundredths for existing fractional stock. Expected balances remain hidden until every selected item is complete.
-4. If stock moves during an item's counting window, begin that item again and physically recount it. Sales are not globally blocked; coordinate briefly with the cashier where practical.
-5. Review the comparison, select a reason and explain every difference. Optional evidence for the submission accepts PDF/JPEG/PNG up to 2 MB.
-6. Confirm and submit for Eugene's review. Submission does not change inventory.
+1. Select **Start Count**, then choose up to 50 tracked items. **Use Last Weekly Item List** preselects the still-tracked items from your last submitted weekly count. You can edit the selection before starting.
+2. **Start Counting** opens the first item's counting window. Count saleable stock and enter the actual quantity. Enter **0** when none is available. Leave the quantity blank until you count it. Use the optional Count Note for damaged or expired goods held separately.
+3. **Save & Count Next** records the current item and opens the next counting window. **Save & Pause** records the current item and returns to the register. Use **Resume Count**, then begin the next item before counting it. **Save & Review** opens review after the last item.
+4. Expected balances stay hidden until every selected item is counted. If stock moves during the current item's window, use **Begin Item Again** and physically recount that item. Other saved items stay on the count.
+5. Review differences, enter a reason and explanation for each, then submit for Eugene's review. Expand **Matching Items** to see counts that agree. Evidence is optional and accepts PDF, JPEG or PNG up to 2 MB. Submission leaves stock quantities unchanged.
 
 An unfinished count can be cancelled. Its evidence stays in history. After submission, use clarification or a linked recount; do not replace the original.
 
@@ -35,3 +34,7 @@ If an old item is no longer tracked or its current movements cannot be compared 
 Existing stock history remains available. The former public immediate stock-count form redirects here and its submissions are denied. Do not use old writers alongside this workflow.
 
 Correct an approved count through a new evidenced count and review; do not edit/delete its movement. Reassigning a submitted count to another counter, financial write-offs, valuation, loss deductions and external notification delivery are outside this version. Owner attention and shift handover provide in-app follow-up.
+
+## Item selection
+
+Search by item name, tick individual items or use **Select Shown**. Weekly Stock Count is the default. Use **Count Details** for another purpose or a comment. Searching retains earlier selections, and **Clear Selection** clears them all. Without JavaScript, individual checkboxes and server-side selection validation remain available.

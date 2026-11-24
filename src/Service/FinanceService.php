@@ -158,7 +158,7 @@ final class FinanceService
         $today=$this->today();$r=$this->repo;
         if(in_array($action,['income_record','income_complete'],true))return $this->incomeCommand($actor,$action,$in);
         if(in_array($action,['week_decide','week_followup'],true))return $this->weeklyCommand($actor,$action,$in);
-        if(in_array($action,['deposit_confirm','receipt_match','request_review','pay_cost'],true)&&!preg_match('/^[1-9][0-9]{0,17}$/D',$in['id']??''))throw new RuntimeException('Choose a valid source identity.');
+        if(in_array($action,['deposit_confirm','request_review','pay_cost'],true)&&!preg_match('/^[1-9][0-9]{0,17}$/D',$in['id']??''))throw new RuntimeException('Choose a valid source identity.');
         if($action==='deposit_record'){
             $amount=$this->amount($in);$fee=$this->amount($in,'fee',true);$date=$this->date($in['date']??'');if($fee>=$amount)throw new RuntimeException('Deposit fee must be less than the cash handed over.');
             $reference=R::text($in['reference']??'',120,true);$cash=$this->cash();if($amount>$cash['held'])throw new RuntimeException('Deposit exceeds the cash available; pending deposits already reserve their cash.');
@@ -178,14 +178,7 @@ final class FinanceService
             if(($in['verified']??'')!=='1')throw new RuntimeException('Check the independent business-wallet transaction before confirming.');if($e['data']['fee'])$this->openCostDate($e['effective_date']);
             return $this->event('deposit_confirmed','deposit',(string)$id,(int)$e['amount_minor'],$e['effective_date'],$actor,['fee'=>$e['data']['fee'],'credit_minor'=>$credit,'confirmation'=>'operator_attestation','evidence'=>R::text($in['evidence']??'',500),'reference'=>$e['data']['reference'],'recorded_by'=>$e['actor_id']]);
         }
-        if($action==='receipt_match'){
-            CashDiscrepancyService::guard($this->access,$in['type']??'payment',(int)($in['id']??0));
-            $id=(int)($in['id']??0);$source=$in['type']??'payment';if(!in_array($source,['payment','income'],true))throw new RuntimeException('Choose a receipt source.');
-            if($source==='income'){$e=$this->find($id);$p=$e['kind']==='income_recorded'&&$e['data']['method']==='momo'?['amount'=>R::decimal((int)$e['amount_minor'])]:null;}else{$view=\Tivoli\Repository\ReceiptAccounting::position($r,$id);$pos=$view['position'];$p=$pos['method']==='momo'&&$pos['amount']>0?['amount'=>R::decimal($pos['amount'])]:null;\Tivoli\Repository\ReceiptAccounting::guardAlias($r,$in['reference']??'',$id);\Tivoli\Repository\ExpenseAccounting::guardAlias($r,$in['reference']??'');if(($pos['last_id']||(($alias=\Tivoli\Repository\ReceiptAccounting::aliasOwner($r,$pos['reference']))!==null&&$alias===\Tivoli\Repository\ReceiptAccounting::collection($r,$id)))&&mb_strtolower(trim($in['reference']??''),'UTF-8')!==mb_strtolower(trim($pos['reference']),'UTF-8'))throw new RuntimeException('Match the current corrected reference.');}
-            if(!$p||$this->linked('receipt_matched',$source,(string)$id))throw new RuntimeException('Choose an unmatched MoMo receipt.');
-            if($this->amount($in)!==R::minor($p['amount'])||($in['verified']??'')!=='1')throw new RuntimeException('Verify the successful business-wallet credit and exact amount.');
-            $id2=$this->event('receipt_matched',$source,(string)$id,R::minor($p['amount']),$today,$actor,['reference'=>R::text($in['reference']??'',120,true),'evidence'=>R::text($in['evidence']??'',500,true),'wallet'=>'Business MoMo']);$this->claim('business_momo',$in['reference'],$id2);return $id2;
-        }
+        if($action==='receipt_match')throw new RuntimeException('Recorded MoMo payments no longer require matching. Report a difference only if the payment failed, was short, or was reversed.');
         if(in_array($action,['provider_request','payroll_request'],true)){
             $date=$this->date($in['date']??'');$this->openCostDate($date);$comment=R::text($in['comment']??'',500);
             if($action==='provider_request'){
@@ -235,7 +228,7 @@ final class FinanceService
             if($action==='day_close'){
                 $cash=$this->cash();foreach($cash['rows'] as $row)if($row['due']<=$date&&$row['outstanding']>0)throw new RuntimeException('Confirm all cash deposits due by this date before closing.');
                 foreach($cash['rows'] as $cashRow)if(substr($cashRow['created_at'],0,10)<=$date&&$cashRow['reserved']>$cashRow['confirmed'])throw new RuntimeException('Confirm deposits in transit through this review date before closing.');
-                if($this->unmatched($date))throw new RuntimeException('Match MoMo receipts through this date before closing.');
+                if($this->openMoMoDiscrepancies($date))throw new RuntimeException('Resolve reported MoMo differences through this date before closing.');
             }
             return $this->event($action==='day_close'?'day_closed':'day_reopened','day',$date,0,$today,$actor,['comment'=>$comment,'snapshot'=>$snapshot]);
         }
@@ -249,18 +242,50 @@ final class FinanceService
             if($action==='period_lock'){foreach($this->events() as $pending){if(in_array($pending['kind'],['provider_requested','payroll_requested'],true)&&$pending['effective_date']>=$start&&$pending['effective_date']<=min($end,$today)&&!$this->linked('request_approved','request',(string)$pending['id'])&&!$this->linked('request_rejected','request',(string)$pending['id']))throw new RuntimeException('Review pending provider and payroll costs before locking.');}if($r->run("SELECT id FROM expense_submissions WHERE status='pending' AND expense_date BETWEEN ? AND ? LIMIT 1",[$start,min($end,$today)])->fetchColumn())throw new RuntimeException('Review pending expense submissions before locking.');}
             if($action==='period_lock'&&PayrollService::pendingCosts($r,$start,min($end,$today)))throw new RuntimeException('Review prepared payroll before locking this period.');
             if($action==='period_lock'&&PurchaseService::pendingCosts($r,$start,min($end,$today)))throw new RuntimeException('Review received purchase costs before locking this period.');
-            if($action==='period_lock'&&(($in['complete']??'')!=='1'||$this->unmatched(min($end,$today))))throw new RuntimeException('Match outstanding MoMo receipts and confirm cost completeness before review.');
+            if($action==='period_lock'&&(($in['complete']??'')!=='1'||$this->openMoMoDiscrepancies(min($end,$today),$start)))throw new RuntimeException('Resolve reported MoMo differences and confirm cost completeness before review.');
             return $this->event($action==='period_lock'?'period_locked':'period_reopened','period',$key,0,$today,$actor,['comment'=>R::text($in['comment']??'',500,true),'snapshot'=>$snapshot,'start'=>$start,'end'=>min($end,$today),'definition'=>'management_estimate_completed_stay_room_revenue']);
         }
         if($action==='review_action'){$due=R::text($in['due']??'',10,true);$d=\DateTimeImmutable::createFromFormat('!Y-m-d',$due);if(!$d||$d->format('Y-m-d')!==$due)throw new RuntimeException('Enter a valid follow-up due date.');return $this->event('review_action','management','follow_up',0,$today,$actor,['action'=>R::text($in['comment']??'',500,true),'owner'=>R::text($in['owner']??'',120,true),'due'=>$due]);}
         throw new RuntimeException('Unknown finance action.');
     }
-    public function unmatched(string $end,?string $start=null):array{
-        $next=(new \DateTimeImmutable($end,new \DateTimeZone('UTC')))->modify('+1 day')->format('Y-m-d').' 00:00:00';
-        $scope=$start===null?'p.id>(SELECT payment_cursor FROM finance_schema WHERE id=1)':'p.created_at>=?';
-        $params=$start===null?[$next]:[$start.' 00:00:00',$next];
-        $rows=$this->repo->run("SELECT p.id,p.amount,p.method,p.created_at,s.reference_no FROM payments p LEFT JOIN stay_receipts s ON s.payment_id=p.id WHERE $scope AND p.created_at<? ORDER BY p.id",$params)->fetchAll();$resolutionEvents=\Tivoli\Domain\Finance\CashResolution::index($this->events());$rows=\Tivoli\Repository\ReceiptAccounting::project($this->repo,$rows);foreach($rows as $i=>&$p){$position=$p['position'];if($position['method']!=='momo'||$position['amount']<=0||\Tivoli\Domain\Finance\CashResolution::position('payment',(int)$p['id'],$position['amount'],$resolutionEvents['payment'][(string)$p['id']]??[])['verified']===$position['amount']){unset($rows[$i]);continue;}$p['amount']=R::decimal($position['amount']);$p['reference_no']=$position['reference'];$p['source']='payment';}unset($p);$rows=array_values($rows);
-        foreach($this->events('income_recorded') as $e)if($e['created_at']<$next&&($start===null||$e['effective_date']>=$start)&&($e['data']['method']??'')==='momo'&&\Tivoli\Domain\Finance\CashResolution::position('income',(int)$e['id'],(int)$e['amount_minor'],$resolutionEvents['income'][(string)$e['id']]??[])['verified']<(int)$e['amount_minor'])$rows[]=['id'=>$e['id'],'amount'=>R::decimal($e['amount_minor']),'created_at'=>$e['created_at'],'reference_no'=>$e['data']['reference']??'','source'=>'income'];return $rows;
+    /** Only explicitly reported differences require review. Ordinary recorded receipts are successful. */
+    public function openMoMoDiscrepancies(string $end,?string $start=null):array
+    {
+        $reported=$this->events('cd_reported');
+        if(!$reported)return [];
+        $events=$this->events();
+        $resolution=\Tivoli\Domain\Finance\CashResolution::index($events);
+        $decisions=[];
+        foreach($events as $event){
+            if(in_array($event['kind'],['cd_credit','cd_reversed','cd_evidence_confirmed','cd_reopened'],true)
+                &&isset($event['data']['case_id'])){
+                $decisions[(int)$event['data']['case_id']]=$event['kind'];
+            }
+        }
+
+        $open=[];
+        foreach($reported as $report){
+            $type=$report['data']['source_type'];
+            if(!in_array($type,['payment','income'],true))continue;
+            $id=(int)$report['data']['source_id'];
+            $caseId=(int)$report['id'];
+            if($type==='payment'){
+                $date=$this->repo->run('SELECT DATE(created_at) FROM payments WHERE id=?',[$id])->fetchColumn()?:$report['effective_date'];
+                if($date>$end||($start!==null&&$date<$start))continue;
+                $payment=\Tivoli\Repository\ReceiptAccounting::position($this->repo,$id)['position'];
+                $amount=$payment['method']==='momo'?$payment['amount']:0;
+            }else{
+                $income=$this->find($id);
+                $date=$income['effective_date'];
+                if($date>$end||($start!==null&&$date<$start))continue;
+                $amount=(int)$income['amount_minor'];
+            }
+            $state=\Tivoli\Domain\Finance\CashResolution::position($type,$id,$amount,$resolution[$type][(string)$id]??[]);
+            if($state['remaining']>0||in_array($decisions[$caseId]??null,[null,'cd_reopened'],true)){
+                $open[]=['case_id'=>$caseId,'source'=>$type,'id'=>$id,'date'=>$date,'amount_minor'=>$state['remaining']];
+            }
+        }
+        return $open;
     }
     public function summary(string $start,string $end):array{
         $r=$this->repo;$from=$start.' 00:00:00';$to=(new \DateTimeImmutable($end))->modify('+1 day')->format('Y-m-d').' 00:00:00';

@@ -2,7 +2,7 @@
 <link rel="stylesheet" href="<?=access_h(access_url('assets/css/owner-exceptions.css'))?>">
 <script src="<?=access_h(workspace_asset_url('assets/js/owner-exceptions.js'))?>" defer></script>
 <div class="owner-exceptions"><p><a href="<?=access_h(access_url('reminders.php'))?>">Open My Reminders</a></p>
-<header class="app-page-heading-row"><div><p class="app-eyebrow">OWNER WORKSPACE</p><h1>Owner Exceptions</h1><p>Open work from your existing workflows. All weeks stay visible until resolved.</p></div><a class="oe-button" href="<?=access_h(access_url('owner_reports.php'))?>">Owner Reports</a></header>
+<header class="app-page-heading-row"><div><p class="app-eyebrow">OWNER WORKSPACE</p><h1>Owner Exceptions</h1><p>Open work from your existing workflows. All weeks stay visible until resolved.</p></div><a class="oe-button" href="<?=access_h(access_url('owner_reports.php'))?>">Dashboard</a></header>
 <?php if($error):?><p class="oe-warning" role="alert"><?=access_h($error)?></p><?php else:$f=$data['filters'];$selected=$data['selected']; ?>
 <div class="oe-counts"><div><strong><?=(int)$data['open']?></strong>Open</div><div><strong><?=(int)$data['overdue']?></strong>Overdue</div><div><strong><?=(int)$data['decisions']?></strong>Needs Your Decision</div></div>
 <p class="oe-muted">Updated <?=access_h(oe_date($data['as_of']))?> UTC · Amounts describe different obligations and are not added together.</p>

@@ -1,0 +1,7 @@
+# Stay confirmation modals — 22 November 2026
+
+Record Full Payment and Confirm Guest Departure now use native modal dialogs above the guest account. Guest/room context and the original confirmation details remain visible. Go Back, Escape, close and backdrop cancel without recording an action. Initial focus is Go Back; keyboard focus remains within the dialog. Confirm submission is guarded against repeat clicks. The existing server confirmation, CSRF, ownership, expiry, operation key, balance checks and services are unchanged. Without JavaScript the existing protected confirmation form remains usable.
+
+Verification: the browser test failed against the former inline confirmation, then passed 24 checks and six responsive views at 1440, 390 and 320 pixels after implementation. Checks covered payment/departure rendering, safe initial focus, keyboard containment, all cancellation paths, forged-CSRF refusal, one confirmed payment and one confirmed departure without another receipt. Existing paid-arrival/owner-authorized-departure HTTP regression passed all 16 assertions. PHP and JavaScript syntax checks passed. Screenshots were visually reviewed. Test writes used only the guarded synthetic server/database; ordinary application records were untouched.
+
+Scope: templates/stays/index.php, public/assets/js/stays.js and public/assets/css/stays.css. No controller, service, schema, credentials, hosting or financial calculation changes. No push or deployment. Private synthetic verification artifacts remain outside the repository under confirmation-modals.

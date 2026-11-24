@@ -4,7 +4,6 @@
 .or h1 { font-size: clamp(1.75rem, 4vw, 2.7rem); }
 .or h2 { font-size: 1.2rem; margin-bottom: .55rem; }
 .or-heading { padding: 1.3rem; background: #e9f0e8; border: 1px solid #d8e3d7; border-radius: 1rem; }
-.or .or-kicker { color: #49665b; font-size: .82rem; font-weight: 700; letter-spacing: .04em; }
 .or-tabs, .or-filters, .or-pages { display: flex; gap: .55rem; flex-wrap: wrap; align-items: end; }
 .or-tabs a, .or-pages a { display: inline-block; padding: .5rem .7rem; border: 1px solid #ccd9ce; border-radius: .55rem; background: #fff; color: inherit; text-decoration: none; }
 .or-tabs a[aria-current] { background: #193e34; color: #fff; border-color: #193e34; }

@@ -18,4 +18,4 @@ stay_select('Result','result',['pass'=>'Pass','corrective'=>'Corrective Action',
 stay_textarea('Comment (Optional)','reason',$formValues['reason'] ?? '');
 ?>
 <?php }$cancelRendered=true;?>
-<div class="stay-actions stay-form-actions"><button class="button" type="submit"><?=$form==='area_followup'?'Save Follow-Up':'Record Action'?></button><?php $link('Cancel',['section'=>'areas','range'=>'all']);?></div></form>
+<div class="stay-actions stay-form-actions"><button class="button" type="submit"><?=$form==='area_followup'?'Save Follow-Up':'Record Area Audit'?></button><?php $link('Cancel',['section'=>'areas','range'=>'all']);?></div></form>

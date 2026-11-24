@@ -27,25 +27,32 @@ for b,k in [(staff,'staff'),(inspector,'inspector'),(outsider,'outsider')]:b.log
 check(outsider.request(root)[0]==403,'Merged route preserves housekeeping permission denial')
 check(staff.request(root+'&page=owner')[0]==403,'Owner review remains restricted')
 for selected in ['needs_cleaning','cleaning','inspection']:
- body=staff.request('/occupancy.php?preparation='+selected)[2];states=re.findall(r'data-preparation="([^"]+)"',body)
+ body=staff.request('/occupancy.php?preparation='+selected)[2];states=[state for hidden,state in re.findall(r'<article[^>]*data-room-id="[^"]+"\s*(hidden)?\s+data-preparation="([^"]+)"',body) if not hidden]
  check(all(s==selected for s in states),'Room Board filter '+selected+' returns only matching states')
- check('title="Housekeeping"' not in body and 'Room Preparation Filters' in body,'Room Board hosts preparation without separate sidebar entry '+selected)
+ check('title="Housekeeping"' not in body and 'data-room-filter' in body,'Room Board hosts preparation without separate sidebar entry '+selected)
 room=root+'&room_id='+str(f['room']);code,_,body=staff.request(room)
-check(code==200 and '<h1>Check-In &amp; Occupancy</h1>' in body and 'Guest Stay Account' in body,'Cleaning opens in the common occupancy workspace')
-p=staff.fields(room,'start');check(staff.request(room,p|dict(csrf='invalid'))[0]==403,'Merged start rejects forged CSRF')
+check(code==200 and '<h1>Check-In &amp; Occupancy</h1>' not in body and 'Guest Stay Account' in body,'Cleaning opens in the common occupancy workspace')
+board=staff.request('/occupancy.php?preparation=needs_cleaning')[2]
+target=re.search(r'<article[^>]*data-room-id="'+str(f['room'])+'"[^>]*>(.*?)</article>',board,re.S)[1]
+check('>Start Cleaning</button>' in target,'Room Board offers direct cleaning submission')
+p={k:html.unescape(v) for k,v in re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]*)"',target)}
+p['room_token']=json.loads(staff.request(room+'&room_token=1')[2])['token']
+check(staff.request(room,p|dict(csrf='invalid'))[0]==403,'Merged start rejects forged CSRF')
 code,headers,_=staff.request(room,p);id=int(re.search(r'[?&]id=(\d+)',headers.get('Location',''))[1])
-check(code==302 and 'occupancy.php?section=housekeeping' in headers['Location'],'Start redirects within occupancy to captured attempt')
+check(code==302 and 'occupancy.php?section=housekeeping' in headers['Location'] and 'form=clean' in headers['Location'],'Room Board start opens the cleaning wizard directly')
 code,headers,_=staff.request(room,p);check(code==302 and int(re.search(r'[?&]id=(\d+)',headers['Location'])[1])==id,'Repeated start reuses operation identity')
 detail=root+'&id='+str(id);clean=detail+'&form=clean';check(inspector.request(clean)[0]==403,'Only assigned cleaner opens cleaning wizard')
 body=staff.request(clean)[2];items=re.findall(r'name="done\[\]" value="([^"]+)"',body);steps=len(re.findall(r'data-clean-step=',body));check(bool(items) and 'data-select-clean="all"' in body,'Existing captured wizard and Select All remain available')
 for step in range(steps):
- p=staff.fields(clean,'progress')|dict(done=json.dumps(items),direction='complete' if step==steps-1 else 'next',verified='1')
+ p=staff.fields(clean,'progress')|dict(done=json.dumps(items),direction='complete' if step==steps-1 else 'next')
  code,headers,_=staff.request(clean,p);check(code==302 and 'occupancy.php?section=housekeeping' in headers['Location'],'Cleaning step '+str(step+1)+' stays in occupancy')
 check(staff.request(detail+'&form=inspect')[0]==403,'Cleaner still requires independent inspection or owner exception')
 inspect=detail+'&form=inspect';body=inspector.request(inspect)[2];ids=re.findall(r'name="result_([^"]+)" value="pass"',body);p=inspector.fields(inspect,'inspect')|dict(results=json.dumps({k:'pass' for k in ids}),decision='release',verified='1')
 check(inspector.request(inspect,p|dict(results=json.dumps({k:'fail' for k in ids})))[0]==400,'Failed inspection cannot release merged room')
 check(inspector.request(inspect,p)[0]==302 and inspector.request(inspect,p)[0]==302,'Independent release and durable replay remain available')
-legacy=staff.request('/housekeeping.php?id='+str(id));check(legacy[0]==200 and 'Check-In &amp; Occupancy' in legacy[2],'Existing housekeeping links remain compatible')
+legacy=staff.request('/housekeeping.php?id='+str(id));check(legacy[0]==200 and 'Activity & Evidence' not in legacy[2],'Existing housekeeping links work without exposing activity to staff')
+owner=Browser();owner.login('admin@example.invalid','Synthetic Admin Passphrase 123!')
+check('Activity & Evidence' in owner.request(detail)[2],'Admin retains access to cleaning activity and evidence')
 m=json.loads((ROOT/'.local-setup/housekeeping-merge-fixture.json').read_text(encoding='utf-8'));reader=Browser();reader.login(m['email'],'Synthetic Visibility Passphrase 123!')
 body=reader.request('/occupancy.php?booking_id='+str(m['booking']))[2]
 check('from_stay='+str(m['booking']) in html.unescape(body) and 'housekeeping.php?room_id=' not in body,'Old guest account contains only its explicitly linked cleaning record')

@@ -56,7 +56,7 @@ trait FinanceWeeklyReview
         unset($snapshot['active_stays']);
         ksort($snapshot['receipts']);
         // This is a period-specific review. Daily reconciliation covers older outstanding money.
-        $unmatched = $this->unmatched($end,$start);
+        $momoDifferences = $this->openMoMoDiscrepancies($end,$start);
         $pending = $this->repo->run("SELECT id,expense_date,amount FROM expense_submissions
             WHERE status='pending' AND expense_date BETWEEN ? AND ? ORDER BY id", [$start,$end])->fetchAll();
         $pending = array_map(fn($row) => ['id'=>(int)$row['id'],'date'=>$row['expense_date'],'amount_minor'=>R::minor($row['amount'])],$pending);
@@ -81,8 +81,8 @@ trait FinanceWeeklyReview
         }
         $snapshot['weekly_cash'] = ['confirmed'=>$cashConfirmed,'outstanding'=>$cashOutstanding,'tracked_receipts'=>$cashSources];
         // The confirmation covers the data rendered by the form. Compare again under the posting lock.
-        $token = hash('sha256',json_encode([$snapshot,$unmatched,$pending,$pendingRequests],JSON_THROW_ON_ERROR));
-        return compact('start','end','close','history','followups','snapshot','pending','unmatched','pendingRequests','token');
+        $token = hash('sha256',json_encode([$snapshot,$momoDifferences,$pending,$pendingRequests],JSON_THROW_ON_ERROR));
+        return compact('start','end','close','history','followups','snapshot','pending','momoDifferences','pendingRequests','token');
     }
 
     private function weeklyCommand(int $actor, string $action, array $in): int
@@ -117,7 +117,7 @@ trait FinanceWeeklyReview
         if ($outcome === 'open') {
             return $this->event('week_kept_open','period',$key,0,$this->today(),$actor,$data+[
                 'snapshot'=>$review['snapshot'],'evidence'=>R::text($in['evidence'] ?? '',120),
-                'blockers'=>['unmatched_receipts'=>count($review['unmatched']),'pending_expenses'=>count($review['pending']),
+                'blockers'=>['reported_momo_differences'=>count($review['momoDifferences']),'pending_expenses'=>count($review['pending']),
                     'pending_requests'=>$review['pendingRequests'],'cash_outstanding'=>$review['snapshot']['weekly_cash']['outstanding']],
             ]);
         }
@@ -125,7 +125,7 @@ trait FinanceWeeklyReview
             throw new RuntimeException('The figures or exceptions changed since you opened the review. Review the latest details and try again.');
         }
         if (($in['complete'] ?? '') !== '1') throw new RuntimeException('Confirm that you reviewed the source records.');
-        if ($review['unmatched']) throw new RuntimeException('Match all MoMo receipts for this week before locking.');
+        if ($review['momoDifferences']) throw new RuntimeException('Resolve reported MoMo differences for this week before locking.');
         if ($review['snapshot']['weekly_cash']['outstanding'] > 0) {
             throw new RuntimeException('Confirm the remaining cash deposits for this week before locking.');
         }

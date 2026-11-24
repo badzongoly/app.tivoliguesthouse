@@ -3,11 +3,23 @@ require_once dirname(__DIR__).'/src/Security/require_login.php';
 require_once dirname(__DIR__).'/bootstrap/stays.php';
 use Tivoli\Service\HousekeepingService;
 use Tivoli\Service\FinanceAttachment;
-$s=new HousekeepingService(access_service());$actor=(int)$user['id'];$owner=$s->owner($actor);
+$s=new HousekeepingService(access_service());$actor=(int)$user['id'];$owner=$s->owner($actor);$isAdmin=access_service()->repo->isAdmin($actor);
 $page=is_string($_GET['page']??null)&&in_array($_GET['page'],['board','owner','activity'],true)?$_GET['page']:'board';
 $id=filter_var($_GET['id']??0,FILTER_VALIDATE_INT)?:0;$roomId=filter_var($_GET['room_id']??0,FILTER_VALIDATE_INT)?:0;$before=max(0,filter_var($_GET['before']??0,FILTER_VALIDATE_INT)?:0);$reviewId=filter_var($_GET['inspection_id']??0,FILTER_VALIDATE_INT)?:0;
 $form=is_string($_GET['form']??null)?$_GET['form']:'';$values=$_SERVER['REQUEST_METHOD']==='POST'?array_filter($_POST,'is_string'):[];$key=preg_match('/^[a-f0-9]{32}$/D',$values['operation_key']??'')?$values['operation_key']:bin2hex(random_bytes(16));
 $fromStay=max(0,filter_var($_GET['from_stay']??0,FILTER_VALIDATE_INT)?:0);$readOnly=$fromStay>0;
+if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&($_GET['room_token']??null)==='1'){
+ header('Content-Type: application/json; charset=UTF-8');
+ header('Cache-Control: no-store');
+ try{
+  if(!$roomId)throw new RuntimeException('Choose a room.');
+  echo json_encode(['token'=>$s->room($actor,$roomId)['token']],JSON_THROW_ON_ERROR);
+ }catch(Throwable $e){
+  http_response_code($e instanceof \Tivoli\Security\PermissionDenied?403:400);
+  echo '{"error":"Room details could not be checked. Reload and try again."}';
+ }
+ exit;
+}
 $error='';$case=null;$room=null;$rows=[];$next=0;$attention=[];$files=[];
 try{
  $s->permit($actor);if($page==='owner'&&!$owner)throw new \Tivoli\Security\PermissionDenied('Only Eugene may open the owner review queue.');

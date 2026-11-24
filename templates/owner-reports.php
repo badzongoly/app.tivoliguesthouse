@@ -81,27 +81,21 @@ if ($f['room']) $base['room'] = $f['room'];
 $detailLink=static fn(string $detail): string=>orUrl($base+['detail'=>$detail]).'#source-detail';
 $receiptLink=static fn(string $start,string $end): string=>orUrl(['view'=>'cash','start'=>$start,'end'=>$end]).'#report-detail';
 $displayStart=$view==='monthly'?$f['month'].'-01':$f['start'];
+$historicalDaily=$view==='daily' && $f['end']!==$f['today'];
 require __DIR__.'/layouts/start.php';
 ?>
 <div class="or">
-    <header class="or-heading">
-        <p class="or-kicker">Tivoli Guesthouse · Owner Workspace</p>
-        <h1><?=access_h(Reports::VIEWS[$view])?></h1>
-        <p><strong>Report Period</strong> <?=access_h(display_date($displayStart))?><?php if($displayStart!==$f['end']):?> to <?=access_h(display_date($f['end']))?><?php endif?> UTC</p>
-        <?php if(!empty($data['finance'])&&in_array('payments.view',$workspace['permissions'],true)&&in_array($view,['daily','cash','monthly'],true)):?>
-            <p><a href="<?=access_h(access_url('finance.php?'.http_build_query(['page'=>'payments','start'=>$displayStart,'end'=>$f['end']])))?>">Open Payment Log for This Period</a></p>
-        <?php endif?>
-        <?php if((new \Tivoli\Service\OwnerExceptionService(access_service()))->owner((int)$user['id'])):?><p><a class="or-button" href="<?=access_h(access_url('owner-exceptions.php'))?>">Open Owner Exceptions</a></p><?php endif?>
-        <?php if(!empty($data['payroll_adjustments']['count'])):?><p>Staff payroll recording adjustments in this range: cost <?=orMoney($data['payroll_adjustments']['cost'])?>; recorded payout <?=orMoney($data['payroll_adjustments']['paid'])?>. Review full staff cost/profit in Finance &amp; Cash; the operating-expense chart retains its original basis.</p><?php endif?>
-        <?php if(!empty($data['purchase_adjustments']['count'])):?><p>Linked purchase/provider corrections are posted in this range. Cost effect <?=orMoney($data['purchase_adjustments']['cost'])?>; recorded payout effect <?=orMoney($data['purchase_adjustments']['paid'])?>. No money moved by these corrections. Original costs, payments and closed snapshots remain retained.</p><?php endif?>
-        <?php if($view==='monthly'&&!empty($data['expense_adjustments']['count'])):?><p>Costs include linked expense corrections by posting date. Original expense entries and closed snapshots remain fixed; corrections do not move money.</p><?php endif?>
-        <?php if(in_array($view,['daily','cash','monthly'],true)&&!empty($data['receipt_adjustments']['count'])):?><p>Recorded totals include <?=(int)$data['receipt_adjustments']['count']?> receipt corrections: <?=orMoney($data['receipt_adjustments']['delta'])?>, posted in this range. No money moved; earned revenue is unchanged. Original receipt entries and adjustments remain separately visible.</p><?php endif?>
-        <?php if(!empty($data['charge_adjustments']['count'])):?><p>Guest charge adjustments posted in this range: <?=orMoney($data['charge_adjustments']['total'])?>. Room <?=orMoney($data['charge_adjustments']['room'])?> · Extras <?=orMoney($data['charge_adjustments']['extras'])?> · Incidentals <?=orMoney($data['charge_adjustments']['incidental'])?>. These change charges, not collections or stock quantities. Earlier closed snapshots remain fixed.</p><?php endif?>
-        <p>As of <?=access_h(display_date($f['asOf']))?> UTC · Accra property time<?php if ($view!=='daily'): ?> · GHS<?php endif ?></p>
-    </header>
-    <nav class="or-tabs workspace-tab-strip" aria-label="Owner report views">
+    <?php if ($view !== 'daily'): ?>
+        <header class="or-heading"><h1><?=access_h(Reports::VIEWS[$view])?></h1></header>
+    <?php endif ?>
+    <?php if(!empty($data['payroll_adjustments']['count'])):?><p>Staff payroll recording adjustments in this range: cost <?=orMoney($data['payroll_adjustments']['cost'])?>; recorded payout <?=orMoney($data['payroll_adjustments']['paid'])?>. Review full staff cost/profit in Finance &amp; Cash; the operating-expense chart retains its original basis.</p><?php endif?>
+    <?php if(!empty($data['purchase_adjustments']['count'])):?><p>Linked purchase/provider corrections are posted in this range. Cost effect <?=orMoney($data['purchase_adjustments']['cost'])?>; recorded payout effect <?=orMoney($data['purchase_adjustments']['paid'])?>. No money moved by these corrections. Original costs, payments and closed snapshots remain retained.</p><?php endif?>
+    <?php if($view==='monthly'&&!empty($data['expense_adjustments']['count'])):?><p>Costs include linked expense corrections by posting date. Original expense entries and closed snapshots remain fixed; corrections do not move money.</p><?php endif?>
+    <?php if(in_array($view,['daily','cash','monthly'],true)&&!empty($data['receipt_adjustments']['count'])):?><p>Recorded totals include <?=(int)$data['receipt_adjustments']['count']?> receipt corrections: <?=orMoney($data['receipt_adjustments']['delta'])?>, posted in this range. No money moved; earned revenue is unchanged. Original receipt entries and adjustments remain separately visible.</p><?php endif?>
+    <?php if(!empty($data['charge_adjustments']['count'])):?><p>Guest charge adjustments posted in this range: <?=orMoney($data['charge_adjustments']['total'])?>. Room <?=orMoney($data['charge_adjustments']['room'])?> · Extras <?=orMoney($data['charge_adjustments']['extras'])?> · Incidentals <?=orMoney($data['charge_adjustments']['incidental'])?>. These change charges, not collections or stock quantities. Earlier closed snapshots remain fixed.</p><?php endif?>
+    <nav class="or-tabs workspace-tab-strip" aria-label="Dashboard reports">
         <?php foreach (Reports::VIEWS as $key=>$label): ?>
-            <a href="<?=orUrl(['view'=>$key])?>" <?=$key===$view?'aria-current="page"':''?>><?=access_h($label)?></a>
+            <a href="<?=orUrl($key==='daily' && $view==='daily' ? ['view'=>$key,'end'=>$f['end']] : ['view'=>$key])?>" <?=$key===$view?'aria-current="page"':''?>><?=access_h($label)?></a>
         <?php endforeach ?>
     </nav>
     <form class="or-filters" method="get" action="<?=access_h(access_url('owner_reports.php'))?>">
@@ -128,7 +122,7 @@ require __DIR__.'/layouts/start.php';
         <button type="submit">Apply Filters</button>
     </form>
 
-    <p><a href="<?=access_h(access_url('finance.php?page=discrepancies'))?>">Review Cash &amp; MoMo Discrepancies</a></p>
+    <?php if (!$historicalDaily): ?><p><a href="<?=access_h(access_url('finance.php?page=discrepancies'))?>">Review Cash &amp; MoMo Discrepancies</a></p><?php endif ?>
     <?php if($expenseCorrectionAttention):?><p class="or-alert" role="status"><?=$expenseCorrectionAttention?> expense correction requests need attention. <a href="<?=access_h(access_url('financial-corrections.php?area=expenses&page=requests'))?>">Review Expense Corrections</a></p><?php endif?>
     <?php if($purchaseCorrectionAttention):?><p class="or-alert" role="status"><?=$purchaseCorrectionAttention?> purchase correction cases or supplier balances need attention. <a href="<?=access_h(access_url('financial-corrections.php?area=purchases'))?>">Review Purchase Corrections</a></p><?php endif?>
     <?php if($guestChargeAttention):?><p class="or-alert" role="status"><?=$guestChargeAttention?> guest charge requests need attention. <a href="<?=access_h(access_url('financial-corrections.php?area=charges&page=requests'))?>">Review Guest Charges</a></p><?php endif?>
@@ -150,22 +144,28 @@ require __DIR__.'/layouts/start.php';
         $occupied = count(array_filter($data['rooms'],static fn($r)=>$r['status']==='occupied'));
         $conflicts = array_values(array_filter($data['rooms'],static fn($r)=>(int)$r['active']!==($r['status']==='occupied'?1:0)));
         orCards([
-            ['Occupied Rooms',$data['rooms']?$occupied.' / '.count($data['rooms']):'Unavailable','Current room register','#room-status'],
+            ['Occupied Rooms',$historicalDaily ? $occupied : ($data['rooms']?$occupied.' / '.count($data['rooms']):'Unavailable'),
+                $historicalDaily ? 'Recorded at end of '.display_date($f['end']) : 'Current room register','#room-status'],
             ['Payments Recorded',orMoney($data['payment']['minor']),$data['payment']['count'].($data['finance']?' receipts on ':' guest receipts on ').display_date($f['end']),$receiptLink($f['end'],$f['end'])],
             ['Room Charges at Departure',$data['roomCharges']===null?'Unavailable':orMoney($data['roomCharges']['minor']),$data['roomCharges']===null?'Saved departure snapshots unavailable':$data['roomCharges']['count'].' saved snapshots · historical coverage partial',$data['roomCharges']===null?null:$detailLink('room-charges')],
-            ['Review Items',count($conflicts)+(int)$data['pending'],count($conflicts).' room conflicts · '.($data['pending']??'unavailable').' MoMo awaiting review','#daily-exceptions'],
+            ['Review Items',count($conflicts)+(int)$data['pending'],count($conflicts).($historicalDaily ? ' room overlaps' : ' room conflicts').' · '.($data['pending']??'unavailable').' reported MoMo differences','#daily-exceptions'],
         ]);
         ?>
         <section class="or-panel" id="room-status">
-            <div class="or-section-title"><div><h2>Room Status</h2><p>Current snapshot · service rooms excluded</p></div>
-                <a href="<?=access_h(access_url('occupancy.php'))?>">Open Room Board</a></div>
-            <?php if (!$data['rooms']): ?><p class="or-note">No rooms in the current register.</p><?php endif ?>
+            <div class="or-section-title"><div><h2>Room Status</h2>
+                <?php if ($historicalDaily): ?>
+                    <p>Recorded occupancy at the end of <?=access_h(display_date($f['end']))?>. Historical room readiness is unavailable.</p>
+                <?php else: ?><p>Current snapshot · service rooms excluded</p><?php endif ?>
+                </div>
+                <?php if (!$historicalDaily): ?><a href="<?=access_h(access_url('occupancy.php'))?>">Open Room Board</a><?php endif ?>
+            </div>
+            <?php if (!$data['rooms']): ?><p class="or-note"><?=$historicalDaily ? 'No occupied rooms found in the stay records.' : 'No rooms in the current register.'?></p><?php endif ?>
             <ul class="or-rooms">
                 <?php foreach ($data['rooms'] as $room): ?>
                     <li><strong><?=access_h($room['name'])?></strong><span><?=access_h($room['type'])?></span>
                         <span class="or-status or-<?=access_h($room['status'])?>"><?=orRoomState($room)?></span>
                         <?php if ((int)$room['active']!==($room['status']==='occupied'?1:0)): ?>
-                            <small class="or-alert-text">Conflict · <?=(int)$room['active']?> active stays</small>
+                            <small class="or-alert-text"><?=$historicalDaily ? 'Overlap' : 'Conflict'?> · <?=(int)$room['active']?> active stays</small>
                         <?php endif ?>
                     </li>
                 <?php endforeach ?>
@@ -180,9 +180,9 @@ require __DIR__.'/layouts/start.php';
                 <?php if (!$conflicts && !$data['pending']): ?><p class="or-note">No exceptions in the available sources.</p><?php endif ?>
                 <?php if ($conflicts): ?><ul><?php foreach ($conflicts as $room): ?>
                     <li><?=access_h($room['name'])?> · <?=orRoomState($room)?> · <?=(int)$room['active']?> active stays</li>
-                <?php endforeach ?></ul><a href="<?=access_h(access_url('occupancy.php'))?>">Review Room Conflicts</a><?php endif ?>
-                <?php if ($data['pending']): ?><p><?=$data['pending']?> recorded MoMo receipts await staff review.</p>
-                    <a href="<?=$detailLink('momo')?>">View MoMo Receipts Awaiting Review</a>
+                <?php endforeach ?></ul><?php if (!$historicalDaily): ?><a href="<?=access_h(access_url('occupancy.php'))?>">Review Room Conflicts</a><?php endif ?><?php endif ?>
+                <?php if ($data['pending']): ?><p><?=$data['pending']?> MoMo payment differences were reported.</p>
+                    <a href="<?=$detailLink('momo')?>">View Reported MoMo Differences</a>
                 <?php endif ?>
             </section>
         </div>
@@ -237,7 +237,7 @@ require __DIR__.'/layouts/start.php';
             <section class="or-panel"><h2>MoMo Review Coverage</h2>
                 <?php if (!$data['finance']): ?><p class="or-note">Unavailable · finance matching has not been activated.</p>
                 <?php else: orBars(array_map(static fn($r)=>[$r['coverage'],$r['minor']],$data['momo']),'All MoMo receipts in the selected dates'); ?>
-                    <p class="or-note">Current effective MoMo receipts from the selected original-date cohort, as of report time. Recording adjustments are excluded from matching tasks; channel totals above retain separately dated adjustments. Matches use staff-recorded wallet evidence.</p>
+                    <p class="or-note">Current effective MoMo receipts from the selected original-date cohort, as of report time. Recorded MoMo payments count as successful. Historical wallet evidence and reported differences are shown separately.</p>
                 <?php endif ?>
                 <?php if ($data['finance']): ?><a href="<?=$detailLink('momo')?>">View MoMo Receipt Coverage</a><?php endif ?>
             </section>

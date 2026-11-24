@@ -22,8 +22,7 @@ check(!in_array($other,$ids,true)&&!in_array($system,$ids,true),'Non-admin opera
 check(count(array_filter($rows,fn($e)=>(int)$e['actor_id']!==$clerk))===0,'Every returned non-admin feed row belongs to actor');
 $older=$s->operationalActivity($clerk,$other)['rows'];check(count(array_filter($older,fn($e)=>(int)$e['actor_id']!==$clerk||(int)$e['id']>=$other))===0,'Activity cursor cannot bypass actor scope');
 $ids=array_map('intval',array_column($s->operationalActivity($admin)['rows'],'id'));check(in_array($own,$ids,true)&&in_array($other,$ids,true)&&in_array($system,$ids,true),'Admin retains all actors including system events');
-$events=$s->snapshot($clerk,$booking)['activity'];$probe=array_values(array_filter($events,fn($e)=>str_contains($e['payload'],$tag)));
-check(count($probe)===1&&json_decode($probe[0]['payload'],true)['source']==='own','Non-admin guest Activity retains only own action');
+check($s->snapshot($clerk,$booking)['activity']===[],'Non-admin stay snapshot omits Stay Activity');
 $probe=array_values(array_filter($s->snapshot($admin,$booking)['activity'],fn($e)=>str_contains($e['payload'],$tag)));check(count($probe)===3,'Admin guest Activity retains complete history');
 check((int)$r->run('SELECT COUNT(*) FROM security_audit WHERE id IN (?,?,?)',[$own,$other,$system])->fetchColumn()===3,'Visibility filters preserve all underlying events');
 

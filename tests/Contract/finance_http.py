@@ -38,9 +38,19 @@ for page in ['payments','expenses','payroll','revenue','profit','activity']:
 for page in ['overview','deposits','providers','income']:
  status,headers,body=clerk.request('/finance.php?page='+page)
  check(status==200 and 'Prepare Monthly Payroll' not in body,'cashier '+page+' is scoped')
-for form in ['deposit_record','deposit_confirm','receipt_match','request_review','pay_cost','day_close','day_reopen','period_lock','period_reopen','review_action']:
+for form,label in {
+ 'deposit_record':'Record Deposit','deposit_confirm':'Confirm Deposit',
+ 'request_review':'Save Review Decision','pay_cost':'Record Completed Payment','day_close':'Close Day',
+ 'day_reopen':'Reopen Day','period_lock':'Lock Period','period_reopen':'Reopen Period','review_action':'Save Follow-Up Action',
+}.items():
  status,headers,body=admin.request('/finance.php?page=payroll&form='+form+'&id=1&type=request')
- check(status==200 and 'Record Action' in body and 'name="operation_key"' in body,'action form '+form+' renders')
+ form_body=next(f for f in re.findall(r'<form\b[^>]*>(.*?)</form>',body,re.S) if 'name="action" value="'+form+'"' in f)
+ check(status==200 and ('>'+label+'</button>') in form_body and 'name="operation_key"' in form_body,'action form '+form+' has its specific submit label')
+ check(re.search(r'<a class="button secondary" href="[^"]+">Cancel</a>',form_body) is not None,'action form '+form+' has a styled Cancel link')
+status,headers,_=admin.request('/finance.php?page=daily&form=receipt_match&type=payment&id=1')
+check(status==302 and 'page=discrepancies' in headers['Location'],'Old matching URL opens the linked difference workflow')
+body=admin.request('/finance.php?page=daily')[2]
+check('Recorded MoMo payments count as successful' in body and 'Unmatched Guest' not in body and 'Match Wallet Evidence' not in body,'Daily review accepts recorded MoMo payments without a matching queue')
 check(clerk.request('/finance.php',{'action':'provider_request','operation_key':secrets.token_hex(16)})[0]==403,'finance mutation requires CSRF')
 body=clerk.request('/finance.php?page=deposits&form=deposit_record')[2];csrf=re.search('name="csrf" value="([a-f0-9]+)"',body).group(1)
 check(clerk.request('/finance.php',{'csrf':csrf,'action':'period_lock','operation_key':secrets.token_hex(16),'period':'week','start':'2026-10-26','comment':'Forged review','complete':'1'})[0]==403,'cashier cannot forge a financial review')

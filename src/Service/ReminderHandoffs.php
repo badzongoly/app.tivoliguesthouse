@@ -19,9 +19,13 @@ trait ReminderHandoffs
         if(preg_match('/^(deposit|handover):([1-9][0-9]*)$/D',$key,$m)){$type=$m[1];$id=(int)$m[2];}
         elseif(preg_match('/^momo:(payment|income)-([1-9][0-9]*)$/D',$key,$m)){$type=$m[1];$id=(int)$m[2];}
         if($type!==''){$case=$this->access->repo->run("SELECT id FROM finance_events WHERE kind='cd_reported' AND target_type='cash_discrepancy' AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.source_type'))=? AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.source_id'))=? ORDER BY id DESC LIMIT 1",[$type,(string)$id])->fetchColumn();if($case){(new CashDiscrepancyService($this->access,$this->now))->detail($actor,(int)$case);return $this->handoffRow($key,'Continue At Original Discrepancy #'.$case,'finance.php?page=discrepancies&id='.$case.'#discrepancy-action');}}
+        if(in_array($type,['payment','income'],true)){
+            (new CashDiscrepancyService($this->access,$this->now))->source($actor,$type,$id);
+            return array_replace($this->handoffRow($key,'Recorded MoMo Payment','finance.php?page=payments'),['resolved'=>true]);
+        }
         if(str_starts_with($key,'cash:')){
             $id=substr($key,5);foreach($this->cashData()['rows'] as $row)if(str_replace(':','-',(string)$row['id'])===$id&&array_sum($row['available'])===0&&$row['outstanding']>0)return $this->handoffRow($key,'Cash Dispatched · Original Deposit Obligation Retained','finance.php?page=deposits#finance-action');
-            if(ctype_digit($id)){$p=\Tivoli\Repository\ReceiptAccounting::position($this->access->repo,(int)$id);if($p['position']['method']==='momo')return $this->handoffRow($key,'Receipt Reclassified At Source · Continue Wallet Review','finance.php?page=daily#finance-action');}
+            if(ctype_digit($id)){$p=\Tivoli\Repository\ReceiptAccounting::position($this->access->repo,(int)$id);if($p['position']['method']==='momo')return $this->handoffRow($key,'Receipt Reclassified At Source · View Payment','finance.php?page=payments');}
         }
         return null;
     }

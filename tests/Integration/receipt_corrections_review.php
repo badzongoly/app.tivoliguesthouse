@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/historical_momo_fixture.php';
 if(PHP_SAPI!=='cli')exit(1);putenv('TIVOLI_TEST_MODE=1');require dirname(__DIR__,2).'/bootstrap/stays.php';
 use Tivoli\Service\ReceiptCorrectionService;
 $a=access_service();$r=$a->repo;
@@ -26,18 +27,23 @@ if(in_array($kind,['all','chain'],true)){
  $out=cr($keeper,['amount'=>'80.00']);cc($out['id']);$r->run("INSERT INTO payments(booking_id,method,amount,note,created_at) VALUES(?,'momo',80,'Synthetic second retained identity','2036-03-25 14:03:00')",[$x['booking']]);$third=(int)$r->db->lastInsertId();$r->run('INSERT INTO stay_receipts VALUES(?,?,?,?)',[$third,$staff,$x['ref'],'2036-03-25 14:03:00']);
  $out=cr($keeper,['type'=>'duplicate','keeper_id'=>(string)$third]);cc($out['id']);ca(\Tivoli\Repository\ReceiptAccounting::position($r,$keeper)['position']['amount']===0,'Duplicate keeper chain resolves to current real collection');
  ca($r->run("SELECT * FROM finance_claims WHERE scope='receipt_alias' AND identity_hash=?",[hash('sha256',mb_strtolower($x['ref'],'UTF-8'))])->fetch()===$alias,'Canonical identity resolution preserves original alias row exactly');
- cn(fn()=>$f->execute($owner,'receipt_match',['id'=>(string)$third,'type'=>'payment','amount'=>'80.00','reference'=>'UNRELATED-'.ck(),'verified'=>'1','evidence'=>'Synthetic wrong canonical reference'],ck()),'Inherited collection alias requires the verified effective reference');
- $f->execute($owner,'receipt_match',['id'=>(string)$third,'type'=>'payment','amount'=>'80.00','reference'=>$x['ref'],'verified'=>'1','evidence'=>'Synthetic canonical identity matched'],ck());ca(true,'Retained collection can match its immutable inherited alias');
+ cn(fn()=>$f->execute($owner,'receipt_match',['id'=>(string)$third,'type'=>'payment','amount'=>'80.00','reference'=>'UNRELATED-'.ck(),'verified'=>'1','evidence'=>'Synthetic wrong canonical reference'],ck()),'Retired matching does not accept an unrelated reference');
+ historicalMoMoMatch($r,$owner,['id'=>(string)$third,'type'=>'payment','amount'=>'80.00','reference'=>$x['ref'],'verified'=>'1','evidence'=>'Synthetic canonical identity matched'],$clock);ca(true,'Archived match retains its immutable inherited alias');
 }
 if(in_array($kind,['all','matching'],true)){
  $report=new \Tivoli\Repository\OwnerReports($r);$filters=\Tivoli\Repository\OwnerReports::filters(['view'=>'daily','end'=>'2036-03-25'],new DateTimeImmutable('2036-04-16 14:00:00',new DateTimeZone('UTC')));
  $historic=\Tivoli\Repository\OwnerReports::filters(['view'=>'daily','end'=>'2036-03-25'],new DateTimeImmutable('2036-04-15 13:00:00',new DateTimeZone('UTC')));
  $x=cp('cash','100.00');$base=$report->read($filters);$past=$report->read($historic);$out=cr($x['payment'],['type'=>'method','method'=>'momo','reference'=>'REVIEW-MATCH-'.ck()]);cc($out['id']);$after=$report->read($filters);
- ca((int)$after['pending']===(int)$base['pending']+1,'Owner matching alert includes Cash to MoMo effective receipt');
- ca((int)$report->read($historic)['pending']===(int)$past['pending'],'Matching projection honors historical as-of cutoff');
- $x=cp('momo','100.00');$before=$report->read($filters);$out=cr($x['payment'],['type'=>'method','method'=>'cash','reference'=>'']);cc($out['id']);$after=$report->read($filters);ca((int)$after['pending']===(int)$before['pending']-1,'MoMo to Cash removes obsolete wallet matching alert');
- $x=cp('momo','100.00',false,'2036-04-15 12:00:00');$r->run("INSERT INTO payments(booking_id,method,amount,note,created_at) VALUES(?,'momo',100,'Synthetic duplicate for review count','2036-03-25 14:02:00')",[$x['booking']]);$keeper=(int)$r->db->lastInsertId();$r->run('INSERT INTO stay_receipts VALUES(?,?,?,?)',[$keeper,$staff,$x['ref'],'2036-03-25 14:02:00']);$before=$report->read($filters);$out=cr($x['payment'],['type'=>'duplicate','keeper_id'=>(string)$keeper]);cc($out['id']);$after=$report->read($filters);ca((int)$after['pending']===(int)$before['pending']-1,'Compensated duplicate no longer creates a matching alert');
+ ca((int)$after['pending']===(int)$base['pending'],'Cash reclassified to MoMo creates no routine review item');
+ $differences=new \Tivoli\Service\CashDiscrepancyService($a,$clock);
+ $source=$differences->source($staff,'payment',$x['payment']);
+ $differences->execute($staff,'report',['type'=>'payment','source_id'=>(string)$x['payment'],'source_token'=>$source['token'],
+    'category'=>'short','reason'=>'Synthetic real wallet difference'],ck());
+ ca((int)$report->read($filters)['pending']===(int)$after['pending']+1,'Only a reported difference enters owner review');
+ ca((int)$report->read($historic)['pending']===(int)$past['pending'],'Reported differences respect the historical as-of cutoff');
+ $x=cp('momo','100.00');$before=$report->read($filters);$out=cr($x['payment'],['type'=>'method','method'=>'cash','reference'=>'']);cc($out['id']);$after=$report->read($filters);ca((int)$after['pending']===(int)$before['pending'],'MoMo to Cash leaves independent reported differences unchanged');
+ $x=cp('momo','100.00',false,'2036-04-15 12:00:00');$r->run("INSERT INTO payments(booking_id,method,amount,note,created_at) VALUES(?,'momo',100,'Synthetic duplicate for review count','2036-03-25 14:02:00')",[$x['booking']]);$keeper=(int)$r->db->lastInsertId();$r->run('INSERT INTO stay_receipts VALUES(?,?,?,?)',[$keeper,$staff,$x['ref'],'2036-03-25 14:02:00']);$before=$report->read($filters);$out=cr($x['payment'],['type'=>'duplicate','keeper_id'=>(string)$keeper]);cc($out['id']);$after=$report->read($filters);ca((int)$after['pending']===(int)$before['pending'],'Compensated duplicate does not create an extra review item');
  $cashFilters=\Tivoli\Repository\OwnerReports::filters(['view'=>'cash','start'=>'2036-03-25','end'=>'2036-03-25'],new DateTimeImmutable('2036-04-16 14:00:00',new DateTimeZone('UTC')));
- $coverage=$report->read($cashFilters);ca(array_sum(array_map(fn($v)=>(int)$v['count'],$coverage['momo']))===(int)$after['pending']+array_sum(array_map(fn($v)=>$v['coverage']==='Matched by staff'||$v['coverage']==='Historical coverage unknown'?(int)$v['count']:0,$coverage['momo'])),'Owner coverage counts effective receipts, not compensating report legs');
+ $coverage=$report->read($cashFilters);ca(array_sum(array_map(fn($v)=>(int)$v['count'],$coverage['momo']))===(int)$after['pending']+array_sum(array_map(fn($v)=>$v['coverage']!=='Difference reported'?(int)$v['count']:0,$coverage['momo'])),'Owner coverage counts effective receipts, not compensating report legs');
 }
 echo "TOTAL $n receipt correction review assertions passed.\n";

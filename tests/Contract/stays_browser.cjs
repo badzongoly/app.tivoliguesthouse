@@ -43,7 +43,7 @@ await call('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFa
 await nav('/occupancy.php?section=rooms&form=room_save&id='+fixture.room_id+'#stay-action');
 if(!await ev(`(()=>{const group=document.querySelector('.stay-form-actions'),b=group.querySelector('button').getBoundingClientRect(),a=group.querySelector('a').getBoundingClientRect();return Math.abs(b.top-a.top)<3&&!!document.querySelector('select[name=type][required]')&&!document.querySelector('[name=reason]').required;})()`))throw new Error('Room form actions, type list or optional comment failed at '+width);
 }
-console.log('PASS room form dropdown and optional Comment; Record Action/Cancel align at desktop and mobile widths');
+console.log('PASS room form dropdown and optional Comment; Save Room/Cancel align at desktop and mobile widths');
 const roomFormShot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});fs.writeFileSync('.local-setup/room-form-mobile.png',Buffer.from(roomFormShot.data,'base64'));
 
 await nav('/occupancy.php?section=areas&form=area_audit#stay-action');await new Promise(r=>setTimeout(r,200));

@@ -8,7 +8,6 @@ use Throwable;
 trait OwnerExceptionOperationalFeeds
 {
     private function operationalFeeds():void{
-        $this->feed('momo','Money',true,fn()=>$this->momoFeed());
         $this->feed('purchase','Approvals',$this->has('bookings.manage','expenses.submit','expenses.manage','stock.manage'),fn()=>$this->purchaseFeed());
         $this->feed('corrections','Corrections',true,fn()=>$this->correctionFeeds());
         $this->feed('payroll','Payroll',$this->has('hr.salary'),fn()=>$this->payrollFeed());
@@ -23,17 +22,6 @@ trait OwnerExceptionOperationalFeeds
     private function journal():void{if(($this->coverage['journal']??'')!=='available')throw new RuntimeException('Original source journal unavailable.');}
     private function stateEvents(array $history,array $transitions,string $initial):string{
         foreach($history as $e)if(isset($transitions[$e['kind']]))$initial=$transitions[$e['kind']];return $initial;
-    }
-    private function momoFeed():void{
-        $this->journal();$keys=[];
-        foreach($this->receipts as $id=>$r)if($r['position']['method']==='momo'&&$r['position']['amount']>0)$keys['payment:'.$id]=['payment',$id];
-        foreach($this->financeEvents as $e){if($e['kind']==='income_recorded'&&($e['data']['method']??'')==='momo')$keys['income:'.$e['id']]=['income',(int)$e['id']];if($e['kind']==='receipt_matched'&&$e['target_type']==='payment'&&isset($this->receipts[(int)$e['target_id']]))$keys['payment:'.$e['target_id']]=['payment',(int)$e['target_id']];}
-        foreach($keys as $identity=>[$type,$id]){
-            if(isset($this->discrepancies[$identity]))continue;
-            try{$c=$this->sourceBalance($type,$id);$resolved=$c['remaining']===0;$path=$this->path('finance.php',['page'=>'daily','form'=>'receipt_match','type'=>$type,'id'=>$id,'date'=>substr($c['row']['created_at'],0,10)],'finance-action');
-                $this->add($this->row('momo:'.$type.'-'.$id,'Money','MoMo Receipt Evidence',ucfirst($type).' #'.$id,$path,$resolved?($c['amount']===0?'Receipt Reclassified At Source':'Wallet Evidence Verified'):'Awaiting Independent Wallet Evidence',$resolved,true,$this->actor,'',$c['remaining'],['Effective Source Amount'=>$this->money($c['amount']),'Verified Amount'=>$this->money($c['verified'])],$this->history($type,$id)));
-            }catch(Throwable){$this->coverage['momo']='unavailable';$this->unavailable('momo:'.$type.'-'.$id,'Money','MoMo Source #'.$id.' · Source Unavailable',$this->path('finance.php',['page'=>'daily']));}
-        }
     }
     private function purchaseFeed():void{
         (new PurchaseService($this->access,$this->now()))->permit($this->actor);$this->journal();$costs=[];

@@ -17,7 +17,9 @@ except urllib.error.HTTPError as response:direct=response
 check(direct.code==403 and direct.read()==b'','internal controller stops before bootstrap; no authentication bypass')
 check('Guest Charges &amp; Refunds' in staff.request('/financial-corrections.php')[2],'guest charges use existing correction tabs')
 check(staff.request(base+'&page=review')[0]==403 and admin.request(base+'&page=review')[0]==403,'review queue restricted to configured owner')
-check('Synthetic charge HTTP guest' in staff.request(source)[2],'request shows actual guest and original charge')
+body=staff.request(source)[2]
+check('Synthetic charge HTTP guest' in body,'request shows actual guest and original charge')
+check('name="confirmed" value="1"' in body and 'type="checkbox" name="confirmed"' not in body and re.search(r'<a class="button secondary"[^>]*>Cancel</a>',body),'Charge request uses submit confirmation and a styled Cancel control')
 p=staff.fields(source,'request')|dict(amount='250.00',reason='Synthetic private guest correction reason',confirmed='1');check(staff.request(source,p|dict(csrf='bad'))[0]==403,'forged charge request denied');check(staff.request(source,p|dict(operation_key='bad'))[0]==400,'malformed key cannot create a fresh operation')
 proof=b'%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF';code,headers,_=staff.request(source,p,proof);check(code==302,'supported charge request with private evidence submitted');cid=int(re.search(r'id=(\d+)',headers['Location'])[1]);detail=base+'&id='+str(cid)
 check(staff.request(source,p,proof)[0]==302,'request retry keeps one identity');check(other.request(detail)[0]==403 and admin.request(detail)[0]==403,'private charge case restricted to requester and owner')

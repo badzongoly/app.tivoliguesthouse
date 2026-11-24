@@ -45,7 +45,7 @@ check('<select name="type" required' in room_form and '<input type="text" name="
 comment=re.search(r'<label[^>]*>Comment \(Optional\)<textarea name="reason"([^>]*)>',room_form)
 check(comment is not None and 'required' not in comment.group(1),'room setup Comment is optional')
 actions=re.search(r'<div class="stay-actions stay-form-actions">(.*?)</div>',room_form,re.S)
-check(actions is not None and 'Record Action' in actions.group(1) and '>Cancel</a>' in actions.group(1),'Record Action and Cancel share one action row')
+check(actions is not None and 'Save Room' in actions.group(1) and '>Cancel</a>' in actions.group(1),'Save Room and Cancel share one action row')
 
 for path in ['/checkin.php','/checkout.php','/extras.php','/stock.php','/rooms.php','/admin_recovery.php']:
     check(admin.request(path,{'action':'legacy_probe'})[0]==409,'old writer denied '+path)

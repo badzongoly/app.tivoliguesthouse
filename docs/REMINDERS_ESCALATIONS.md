@@ -12,6 +12,8 @@ Open **Overview → Reminders**, or the **Reminders** link in the workspace head
 
 ## Settings
 
+Notification Settings is also available under **Settings → Notifications**, using the [shared Settings workspace](SETTINGS_WORKSPACE.md). Personal and configured-owner sub-settings remain distinct. **Check Now** stays on Reminders; use Back To Reminders from Settings.
+
 **My Account → Notification Preferences** (or **Reminders → Notification Settings**) lets each user enable Email and WhatsApp for their own account. In-app reminders remain available. Optional channels start off. Email uses the account email address; WhatsApp needs an international number and explicit consent. Turning a channel off cancels unsent deliveries. Changing a contact invalidates its previous verification.
 
 The configured owner alone manages **Reminder Rules**, **Contact Verification** and **Delivery Services**. Independently establish contact ownership and record that evidence before enabling delivery. Verification grants delivery only, never application privileges.

@@ -90,7 +90,7 @@ check($s->snapshot($admin,$id)['bill']['room']===12000,'standing tariff change p
 cmd('incidental',['booking_id'=>(string)$id,'amount'=>'20.00','description'=>'Synthetic laundry evidence','reason'=>'Synthetic requested service']);
 $q=(int)$r->run('SELECT MAX(id) FROM stay_incidentals WHERE booking_id=?',[$id])->fetchColumn();check($s->snapshot($admin,$id)['bill']['incidental']===0,'pending incidental excluded');
 deny(fn()=>cmd('review_incidental',['booking_id'=>(string)$id,'id'=>(string)$q,'decision'=>'approved','reason'=>'Denied']),'clerk incidental approval denied');
-cmd('review_incidental',['booking_id'=>(string)$id,'id'=>(string)$q,'decision'=>'approved','reason'=>'Synthetic admin approval'],$admin);check($s->snapshot($admin,$id)['bill']['balance']===2000,'approved incidental counts once');
+cmd('review_incidental',['booking_id'=>(string)$id,'id'=>(string)$q,'decision'=>'approved'],$admin);check($s->snapshot($admin,$id)['bill']['balance']===2000,'approved incidental counts once');
 deny(fn()=>cmd('checkout',['booking_id'=>(string)$id,'expected_balance'=>'2000','extras_checked'=>'1','keys_returned'=>'1']),'unpaid checkout blocked');
 deny(fn()=>cmd('allow_checkout',['booking_id'=>(string)$id]),'clerk cannot approve unpaid checkout');
 cmd('allow_checkout',['booking_id'=>(string)$id],$admin);check($s->snapshot($clerk,$id)['bill']['approval'],'designated owner exception available to clerk');

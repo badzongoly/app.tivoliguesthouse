@@ -81,9 +81,12 @@
  // Submitted forms may advance to the next step. Store only the source URL;
  // confirmation controls, CSRF, files, values and operation keys stay untouched.
  document.addEventListener('submit',e=>{
-  if(e.defaultPrevented||!['get','post'].includes(e.target.method?.toLowerCase()))return;
+  if(e.defaultPrevented||!(e.target instanceof HTMLFormElement))return;
+  // Form fields named "method" or "action" can shadow the DOM properties.
+  const method=e.submitter?.getAttribute('formmethod')||e.target.getAttribute('method')||'get';
+  if(!['get','post'].includes(method.toLowerCase()))return;
   const from=safe(location.href);if(!from)return;
-  const destination=safe(e.submitter?.getAttribute('formaction')||e.target.action||from);
+  const destination=safe(e.submitter?.getAttribute('formaction')||e.target.getAttribute('action')||from);
   if(!destination||family(destination)!==family(from))return;
   store.pending={family:family(from),to:returnTo||safe(new URL(location.href).searchParams.get(marker))||from,at:Date.now()};persist();
  });

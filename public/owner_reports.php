@@ -5,19 +5,19 @@ use Tivoli\Repository\OwnerReports;
 
 if (getenv('TIVOLI_OWNER_REPORTS') === '0') {
     http_response_code(404);
-    exit('Owner Reports is disabled.');
+    exit('Dashboard is disabled.');
 }
 if (!access_service()->repo->isAdmin((int)$user['id'])) {
     http_response_code(403);
-    exit('Owner Reports is available to administrators only.');
+    exit('Dashboard is available to administrators only.');
 }
 if (!in_array($_SERVER['REQUEST_METHOD'] ?? 'GET',['GET','HEAD'],true)) {
     header('Allow: GET, HEAD');
     http_response_code(405);
-    exit('Owner Reports is read-only.');
+    exit('Dashboard is read-only.');
 }
 
-$layoutTitle = 'Owner Reports';
+$layoutTitle = 'Dashboard';
 $layoutPage = 'owner-reports';
 $asOf = new DateTimeImmutable('now',new DateTimeZone('Africa/Accra'));
 $view = is_string($_GET['view'] ?? null) && isset(OwnerReports::VIEWS[$_GET['view']]) ? $_GET['view'] : 'daily';
@@ -33,10 +33,10 @@ try {
         }
         $query['end'] = $query['month'].'-01';
     }
-    if (isset($query['export'])) throw new InvalidArgumentException('Owner Reports displays detail in the app.');
+    if (isset($query['export'])) throw new InvalidArgumentException('The Dashboard displays report details in the app.');
     $filters = OwnerReports::filters($query,$asOf);
     $data = $report->read($filters);
-    if ($filters['detail']==='') {
+    if ($filters['detail']==='' && ($view!=='daily' || $filters['end']===$filters['today'])) {
         $expenseCorrectionService=new \Tivoli\Service\ExpenseCorrectionService(access_service());if((new \Tivoli\Service\FinanceService(access_service()))->installed()&&$expenseCorrectionService->owner((int)$user['id']))$expenseCorrectionAttention=$expenseCorrectionService->attentionCount((int)$user['id']);
         if((new \Tivoli\Service\FinanceService(access_service()))->canPostLate((int)$user['id'])&&in_array('hr.salary',access_service()->repo->privileges((int)$user['id']),true))$payrollAttention=(new \Tivoli\Service\PayrollService(access_service()))->attentionCount((int)$user['id']);
         if((new \Tivoli\Service\FinanceService(access_service()))->canPostLate((int)$user['id'])

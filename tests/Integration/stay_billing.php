@@ -74,7 +74,7 @@ $shortId=billingCmd('checkin',$short,$clerk)['booking_id'];$shortBill=$s->snapsh
 cb($shortBill['paid']===12000&&$shortBill['balance']===0,'Short-stay check-in records exact session payment');
 cb($future->snapshot($clerk,$shortId)['bill']['room']===12000,'Short overrun preserves fixed session rate');
 $finance=new FinanceService($a,'2029-04-03 10:00:00');
-cb((bool)array_filter($finance->unmatched('2029-04-03'),fn($p)=>(int)$p['id']===(int)$r->run('SELECT id FROM payments WHERE booking_id=?',[$shortId])->fetchColumn()),'Arrival MoMo receipt enters wallet matching');
+cb(!(bool)array_filter($finance->openMoMoDiscrepancies('2029-04-03','2029-04-03'),fn($p)=>(int)$p['id']===(int)$r->run('SELECT id FROM payments WHERE booking_id=?',[$shortId])->fetchColumn()),'Arrival MoMo receipt is recorded without a separate match');
 cb((bool)array_filter($finance->cash()['rows'],fn($p)=>(int)$p['id']===(int)$payment[0]['id']),'Arrival cash enters full-deposit tracking');
 $r->run("INSERT INTO rooms(name,type,rate,status) VALUES(?,'Standard','300.00','vacant')",['Synthetic closed arrival '.$tag]);$closedRoom=(int)$r->db->lastInsertId();
 $r->run("INSERT INTO stay_room_settings(room_id,short_rate,short_enabled,ready_state) VALUES(?,'120.00',1,'ready')",[$closedRoom]);

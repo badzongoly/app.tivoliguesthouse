@@ -57,6 +57,19 @@ const evidence=fs.mkdtempSync(path.join(os.tmpdir(),'tivoli-confirmations-'));
  await ev('document.body.innerHTML='+JSON.stringify('<form data-cd-form><p data-cd-preview>Verified GHS 10.00; unresolved GHS 5.00.</p><button id="send">Record Action</button></form>')+';');await ev(script('public/assets/js/cash-discrepancies.js'));await ev('document.querySelector("#send").click();');
  await check('document.querySelector("#app-confirmation-description").textContent.includes("Verified GHS 10.00; unresolved GHS 5.00.")','Cash discrepancy retains its current effect preview');await key('Escape');
 
+ await ev('document.body.innerHTML='+JSON.stringify(
+  '<form data-cd-form data-total="1500" data-verified="1000" data-returned="0">'
+  +'<input type="hidden" name="action" value="followup"><select data-cd-action name="decision">'
+  +'<option value="credit">Record Verified Wallet Credit</option><option value="followup">Add Follow-Up</option></select>'
+  +'<label data-cd-amount><input name="amount" value="5.00"></label><label data-cd-reference><input name="reference"></label>'
+  +'<label data-cd-check><input type="checkbox" name="verified"></label><p data-cd-preview></p>'
+  +'<button type="submit" data-cd-submit>Record Verified Wallet Credit</button></form>')+';');
+ await ev(script('public/assets/js/cash-discrepancies.js'));
+ await check('document.querySelector("[data-cd-submit]").textContent==="Record Verified Wallet Credit"','Discrepancy submit names the selected wallet action');
+ await ev('const select=document.querySelector("[data-cd-action]");select.value="followup";select.dispatchEvent(new Event("change"));document.querySelector("[data-cd-submit]").click();');
+ await check('document.querySelector("[data-cd-submit]").textContent==="Add Follow-Up" && document.querySelector("#app-confirmation-title").textContent==="Add Follow-Up?"','Discrepancy label and confirmation follow the selected action');
+ await key('Escape');
+
  // Exercise every discovered confirmation attribute through the single shared
  // gate. Template expressions are inert prompt text, never executed as PHP/JS.
  const walk=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(dir,e.name)):[path.join(dir,e.name)]);

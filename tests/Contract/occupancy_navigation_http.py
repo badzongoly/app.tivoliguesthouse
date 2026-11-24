@@ -29,21 +29,26 @@ detail='/occupancy.php?booking_id='+str(f['booking']);body=staff.request(detail)
 nav=re.search(r'<nav[^>]*aria-label="Stays"[^>]*>(.*?)</nav>',body,re.S)[1]
 check(re.findall(r'<a[^>]*aria-current="page"[^>]*>(.*?)</a>',nav,re.S)==['Guest Stay Account'],'Guest details select the Guest Stay Account parent')
 sub=re.search(r'<nav[^>]*aria-label="Guest account sections"[^>]*>(.*?)</nav>',body,re.S)[1]
-check('aria-current="page">Bill</a>' in sub and '>Stay Activity</a>' in sub,'Default guest bill has a current tab and scoped Stay Activity label')
+check('aria-current="page">Bill</a>' in sub and '>Stay Activity</a>' not in sub,'Staff guest bill has no Stay Activity tab')
+check(staff.request(detail+'&tab=activity')[0]==403,'Direct Stay Activity is denied to staff')
+check('>Stay Activity</a>' in owner.request(detail)[2] and owner.request(detail+'&tab=activity')[0]==200,'Admin can open Stay Activity')
 for form,label in [('payment','Record Payment'),('extra','Add Extra'),('checkout','Check Out'),('report_departure','Report Unauthorised Departure')]:
  code,_,body=staff.request(detail+'&form='+form)
  check(code==200 and '<form method="post"' in body and 'id="stay-action"' in body,form+' retains its action form')
  check('>'+label+'</a>' not in body,form+' does not repeat its current entry button')
 code,_,body=staff.request('/occupancy.php?form=checkin&room_id='+str(f['ready_room']))
 check(code==200 and 'name="action" value="checkin"' in body,'Ready room retains protected check-in form')
-room=re.search(r'<article[^>]*data-room-id="'+str(f['ready_room'])+'"[^>]*>(.*?)</article>',body,re.S)[1]
-check('>Check In</a>' not in room,'Selected check-in room does not repeat its entry action')
+check('id="stay-room-grid"' not in body and 'aria-label="Stays"' not in body,'Check-in renders without the room board or tabs')
+check('Confirm Check-In &amp; Record Payment' in body and 'Guest Identity Verified' in body and 'name="identity_verified"' not in body,'Check-in uses reminders and payment wording')
+report=staff.request(detail+'&form=report_departure')[2]
+check(report.count('>Cancel</a>')==1 and 'name="vacant"' not in report and 'name="secured"' not in report,'Departure report has reminders and one cancel control')
 body=owner.request('/occupancy.php?booking_id='+str(f['incident_booking']))[2]
 check(body.count('>Recover Outstanding</a>')==1,'Incident guest has one outstanding-collection entry')
 clean='/occupancy.php?section=housekeeping&id='+str(f['attempt'])+'&form=clean';body=staff.request(clean)[2]
 check('data-clean-step=' in body and 'name="operation_key" value=' in body,'Captured cleaning wizard and operation key remain available')
 check('>Continue Cleaning</a>' not in body and '>Back To Room Board</a>' not in body,'Cleaning form has no repeated start or Room Board link')
 check(body.count('>Cleaning History</a>')==1,'One cleaning-history entry in preparation navigation')
+check('Activity &amp; Evidence' not in body and 'Activity & Evidence' not in body and 'Current attempts retain' not in body,'Cleaning wizard excludes activity and revision details')
 original='/occupancy.php?section=housekeeping&id='+str(f['source_attempt'])+'&from_stay='+str(f['source_booking']);body=staff.request(original)[2]
 check('>Back To Guest Stay Account</a>' in body and 'booking_id='+str(f['source_booking']) in body,'Original cleaning record returns to its actual source stay')
 check('name="action"' not in body and 'This is the cleaning record linked to Stay' in body,'Original cleaning record remains read-only')

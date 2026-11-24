@@ -183,8 +183,9 @@ final class OwnerReports
             case 'momo':
                 if (!$finance) return null;
                 [$source,$params]=$this->receiptSource($f,$finance);
-                [$sql,$values]=$this->momoRows($source,$params,$f['asOf']);
-                if ($f['view']==='daily') $sql = "SELECT * FROM ($sql) m WHERE coverage='Awaiting review'";
+                $cutoff = $f['view']==='daily' ? $f['until'] : $f['asOf'];
+                [$sql,$values]=$this->momoRows($source,$params,$cutoff);
+                if ($f['view']==='daily') $sql = "SELECT * FROM ($sql) m WHERE coverage='Difference reported'";
                 $order = 'created_at DESC,source,id DESC';
                 break;
             case 'custody':
@@ -213,11 +214,22 @@ final class OwnerReports
         $bookingSource=DepartureFacts::source($finance);
         [$receipts,$values] = $this->receiptSource($f,$finance);
         $payment = $this->repo->run("SELECT COUNT(*) count,COALESCE(SUM(minor),0) minor FROM ($receipts) x",$values)->fetch();
-        $rooms = $this->rows("SELECT r.id,r.name,r.type,r.status,".($stays?'s.ready_state':'NULL AS ready_state').",
-                    COALESCE(a.active,0) active
-                FROM rooms r ".($stays?'LEFT JOIN stay_room_settings s ON s.room_id=r.id ':'')."
-                LEFT JOIN (SELECT room_id,COUNT(*) active FROM (".$bookingSource.") b WHERE b.operational_status='active' GROUP BY room_id) a ON a.room_id=r.id
-                WHERE ".self::ROOMS." ORDER BY r.name,r.id");
+        if ($f['end'] === $f['today']) {
+            $rooms = $this->rows("SELECT r.id,r.name,r.type,r.status,".($stays?'s.ready_state':'NULL AS ready_state').",
+                        COALESCE(a.active,0) active
+                    FROM rooms r ".($stays?'LEFT JOIN stay_room_settings s ON s.room_id=r.id ':'')."
+                    LEFT JOIN (SELECT room_id,COUNT(*) active FROM ($bookingSource) b
+                        WHERE b.operational_status='active' GROUP BY room_id) a ON a.room_id=r.id
+                    WHERE ".self::ROOMS." ORDER BY r.name,r.id");
+        } else {
+            // A checkout at the next midnight still occupies the room through the selected date.
+            $rooms = $this->rows("SELECT r.id,r.name,r.type,'occupied' status,COUNT(*) active
+                FROM ($bookingSource) b JOIN rooms r ON r.id=b.room_id
+                WHERE b.checkin_at<? AND (b.operational_status='active'
+                    OR (b.operational_status='checked_out' AND b.actual_checkout>=?))
+                    AND ".self::ROOMS."
+                GROUP BY r.id,r.name,r.type ORDER BY r.name,r.id",[$f['until'],$f['until']]);
+        }
         $stayCounts = $this->repo->run("SELECT
             (SELECT COUNT(*) FROM (".$bookingSource.") b JOIN rooms r ON r.id=b.room_id WHERE b.operational_status IN ('active','checked_out')
              AND b.checkin_at>=? AND b.checkin_at<? AND ".self::ROOMS.") arrivals,
@@ -229,8 +241,8 @@ final class OwnerReports
             [$f['from'],$f['until']])->fetch() : null;
         $pending = null;
         if ($finance) {
-            [$momo,$momoValues]=$this->momoRows($receipts,$values,$f['asOf']);
-            $pending=$this->repo->run("SELECT COUNT(*) FROM ($momo) m WHERE coverage='Awaiting review'",$momoValues)->fetchColumn();
+            [$momo,$momoValues]=$this->momoRows($receipts,$values,$f['until']);
+            $pending=$this->repo->run("SELECT COUNT(*) FROM ($momo) m WHERE coverage='Difference reported'",$momoValues)->fetchColumn();
         }
         return compact('payment','rooms','stayCounts','roomCharges','pending','finance');
     }
@@ -293,11 +305,23 @@ final class OwnerReports
     private function momoRows(string $source,array $values,string $asOf): array
     {
         [$effective,$values]=$this->effectiveReceipts($source,$values,$asOf);
-        $verified=\Tivoli\Domain\Finance\CashResolution::verifiedSql('x.source','x.id','x.minor',$this->repo->db->quote($asOf));
+        $cutoff=$this->repo->db->quote($asOf);
+        $verified=\Tivoli\Domain\Finance\CashResolution::verifiedSql('x.source','x.id','x.minor',$cutoff);
+        $reported="EXISTS (SELECT 1 FROM finance_events problem WHERE problem.kind='cd_reported'
+            AND problem.created_at<$cutoff AND JSON_UNQUOTE(JSON_EXTRACT(problem.payload,'$.source_type'))=x.source
+            AND JSON_UNQUOTE(JSON_EXTRACT(problem.payload,'$.source_id'))=CONVERT(x.id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+            AND ($verified<x.minor OR COALESCE((
+                SELECT decision.kind FROM finance_events decision
+                WHERE decision.kind IN ('cd_credit','cd_reversed','cd_evidence_confirmed','cd_reopened')
+                    AND decision.created_at<$cutoff
+                    AND JSON_UNQUOTE(JSON_EXTRACT(decision.payload,'$.case_id'))=CONVERT(problem.id USING utf8mb4) COLLATE utf8mb4_unicode_ci
+                ORDER BY decision.id DESC LIMIT 1
+            ),'cd_reopened')='cd_reopened'))";
         $sql="SELECT x.*,CASE
+            WHEN $reported THEN 'Difference reported'
             WHEN $verified>=x.minor THEN 'Matched by staff'
             WHEN x.source='payment' AND x.id<=(SELECT payment_cursor FROM finance_schema WHERE id=1) THEN 'Historical coverage unknown'
-            ELSE 'Awaiting review' END coverage
+            ELSE 'Recorded as successful' END coverage
             FROM ($effective) x WHERE x.method='momo' AND x.minor>0";
         return [$sql,$values];
     }

@@ -14,7 +14,8 @@ const root=path.resolve(__dirname,'../..'),evidence=fs.mkdtempSync(path.join(os.
  const cases=[
  ['staff','guest','/occupancy.php?booking_id='+f.booking,'Guest Stay Account'],
  ['staff','payment','/occupancy.php?booking_id='+f.booking+'&form=payment','Guest Stay Account'],
- ['staff','checkin','/occupancy.php?room_id='+f.ready_room+'&form=checkin','Room Board'],
+ ['staff','checkin','/occupancy.php?room_id='+f.ready_room+'&form=checkin',null],
+ ['staff','board','/occupancy.php','Room Board'],
  ['staff','clean','/occupancy.php?section=housekeeping&id='+f.attempt+'&form=clean','Room Board'],
  ['staff','original','/occupancy.php?section=housekeeping&id='+f.source_attempt+'&from_stay='+f.source_booking,'Guest Stay Account'],
  ['owner','incident','/occupancy.php?booking_id='+f.incident_booking,'Guest Stay Account'],
@@ -23,15 +24,18 @@ const root=path.resolve(__dirname,'../..'),evidence=fs.mkdtempSync(path.join(os.
  for(const [who,name,path,parent] of cases){
  if(role!==who){await login(who==='owner'?'admin@example.invalid':who==='rooms'?f.rooms_email:f.email,who==='owner'?'Synthetic Admin Passphrase 123!':who==='rooms'?'Synthetic Rooms Only Passphrase 123!':'Synthetic Visibility Passphrase 123!');role=who;}
  await nav(path);
+ if(parent){
  await check('document.querySelectorAll("nav[aria-label=Stays]").length===1',name+' one main stays navigation '+width);
  await check('JSON.stringify([...document.querySelectorAll("nav[aria-label=Stays] [aria-current=page]")].map(a=>a.textContent))==='+JSON.stringify(JSON.stringify([parent])),name+' correct single parent tab');
  await check('(()=>{const a=document.querySelector("nav[aria-label=Stays] [aria-current=page]"),s=getComputedStyle(a);return s.backgroundColor==="rgb(249, 251, 245)"&&s.color==="rgb(25, 62, 52)"})()',name+' selected parent is visibly highlighted');
+ }
  await check('document.documentElement.scrollWidth<=innerWidth',name+' page fits '+width);
  await check('[...document.querySelectorAll("[name=operation_key]")].every(x=>/^[a-f0-9]{32}$/.test(x.value))',name+' form operation keys remain intact');
  const specific={
- guest:'[...document.querySelectorAll("nav")].some(n=>n.getAttribute("aria-label")==="Guest account sections"&&n.textContent.includes("Stay Activity"))',
+ guest:'[...document.querySelectorAll("nav")].some(n=>n.getAttribute("aria-label")==="Guest account sections"&&!n.textContent.includes("Stay Activity"))',
  payment:'![...document.links].some(a=>a.textContent==="Record Payment")&&document.querySelector("form [name=action][value=payment]")!==null',
- checkin:'document.querySelector("[name=action][value=checkin]")!==null&&![...document.links].some(a=>a.closest("[data-room-id]")?.dataset.roomId==="'+f.ready_room+'"&&a.textContent==="Check In")',
+ checkin:'document.querySelector("[name=action][value=checkin]")!==null&&!document.querySelector("#stay-room-grid,nav[aria-label=Stays]")&&(()=>{const row=document.querySelector(".stay-form-actions");return Math.abs(row.querySelector("button").getBoundingClientRect().top-row.querySelector("a").getBoundingClientRect().top)<12})()',
+ board:'(()=>{const search=document.querySelector("[data-room-search]"),select=document.querySelector("[data-room-filter]");select.value="ready";select.dispatchEvent(new Event("change"));const rooms=[...document.querySelectorAll(".stay-room:not([hidden])")];search.value="synthetic-no-room-80808";search.dispatchEvent(new Event("input"));return rooms.length&&rooms.every(r=>r.dataset.preparation==="ready")&&!document.querySelector(".stay-room:not([hidden])")&&Math.abs(search.getBoundingClientRect().top-select.getBoundingClientRect().top)<3})()',
  clean:'![...document.links].some(a=>a.textContent==="Continue Cleaning"||a.textContent==="Back To Room Board")&&[...document.links].filter(a=>a.textContent==="Cleaning History").length===1',
  original:'!document.querySelector("input[name=action]")&&[...document.links].some(a=>a.textContent==="Back To Guest Stay Account"&&a.href.includes("booking_id='+f.source_booking+'"))',
  incident:'[...document.links].filter(a=>a.textContent==="Recover Outstanding").length===1',
@@ -39,6 +43,28 @@ const root=path.resolve(__dirname,'../..'),evidence=fs.mkdtempSync(path.join(os.
  };
  await check(specific[name],name+' consolidated actions and permissions');
  const shot=await page('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});fs.writeFileSync(evidence+'/'+name+'-'+width+'.png',Buffer.from(shot.data,'base64'));views++;
- }}assert.deepEqual(errors,[]);console.log('TOTAL '+checks+' occupancy browser assertions and '+views+' responsive views passed');console.log('EVIDENCE '+evidence);
+ }}
+ async function waitFor(expression){
+     for(let i=0;i<300;i++){
+         try{if(await ev(expression))return;}catch(error){if(!error.message.includes('context'))throw error;}
+         await wait(100);
+     }
+     throw Error('Timed out: '+expression);
+ }
+ await login(f.email,'Synthetic Visibility Passphrase 123!');
+ await nav('/occupancy.php?preparation=needs_cleaning');
+ await ev('document.querySelector(\'[data-room-id="'+f.start_room+'"] [data-start-cleaning] button\').click()');
+ await waitFor('!!document.querySelector("dialog[open] [data-confirmation-accept]")');
+ await check('document.querySelectorAll("dialog[open]").length===1','Board cleaning start asks once');
+ await ev('document.querySelector("[data-confirmation-accept]").click()');
+ await waitFor('new URLSearchParams(location.search).get("form")==="clean"&&!!document.querySelector("[data-cleaning-form]")');
+ await check('document.querySelector("#housekeeping-form h2").textContent.includes("Cleaning Step 1")','Cleaning start opens step one directly');
+ await nav('/occupancy.php?booking_id='+f.booking+'&form=extra');
+ await ev('document.querySelector("[name=extra_id]").value="'+f.extra+'";document.querySelector("[name=settlement]").value="room";document.querySelector(".stay-form-actions button").click()');
+ await waitFor('location.hash==="#stay-bill"&&!!document.querySelector("[data-extra-feedback]")&&document.activeElement.id==="stay-bill"');
+ await check('document.querySelector("[data-extra-feedback]").textContent.includes("Extra posted")','Extra posting shows feedback and focuses Stay Bill');
+ await waitFor('document.querySelector("[data-extra-feedback]").hidden');
+ await check('document.activeElement.id==="stay-bill"','Extra feedback dismisses without stealing focus');
+ assert.deepEqual(errors,[]);console.log('TOTAL '+checks+' occupancy browser assertions and '+views+' responsive views passed');console.log('EVIDENCE '+evidence);
  }finally{if(context)await call('Target.disposeBrowserContext',{browserContextId:context});ws.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

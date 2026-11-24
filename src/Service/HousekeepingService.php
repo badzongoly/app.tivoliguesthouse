@@ -77,6 +77,7 @@ final class HousekeepingService
             elseif($state==='cleaning'){$action=$a&&$a['actor']===$actor?'Continue Cleaning':'View Cleaning';$form=$a&&$a['actor']===$actor?'clean':'';}
             elseif($state==='inspection'){$action=$a&&$a['actor']!==$actor?'Inspect & Release Room':'Review Inspection';$form=$a&&$a['actor']!==$actor?'inspect':'';}
             $out[$id]=['state'=>$state,'attempt_id'=>$a['id']??0,'action'=>$action,'form'=>$form];
+
         }return $out;
     }
     /** Only explicit new links are used. Never substitute the room's latest guest. */
@@ -178,7 +179,7 @@ final class HousekeepingService
             $step=$c['step'];$current=$d['cleaning']['sections'][$step];if(in_array($direction,['next','complete'],true)&&array_diff(array_column($current['items'],'id'),$done))throw new RuntimeException('Complete every item in this step.');
             $comment=R::text($in['comment']??$c['comment'],2000);
             if($direction==='complete'){
-                if($step!==count($d['cleaning']['sections'])-1||array_diff($ids,$done)||($in['verified']??'')!=='1')throw new RuntimeException('Finish every cleaning step and confirm actual completion.');
+                if($step!==count($d['cleaning']['sections'])-1||array_diff($ids,$done))throw new RuntimeException('Finish every cleaning step before recording completion.');
                 $r->run("UPDATE stay_room_settings SET ready_state='awaiting_inspection' WHERE room_id=?",[$d['room_id']]);
                 return [$id,$this->event($actor,'hk_completed',compact('done','comment'),$id)];
             }

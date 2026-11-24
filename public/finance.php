@@ -7,7 +7,7 @@ if(($_GET['page']??'')==='discrepancies'){define('TIVOLI_CASH_DISCREPANCIES',tru
 $s=new FinanceService(access_service());$actor=(int)$user['id'];$admin=$s->isAdmin($actor);$salary=$admin&&in_array('hr.salary',access_service()->repo->privileges($actor),true);
 $page=is_string($_GET['page']??null)?$_GET['page']:'overview';$pages=['overview'=>'Money Overview','daily'=>'Daily Reconciliation','weekly'=>'Weekly Reconciliation','payments'=>'Payment Log','income'=>'Other Income','deposits'=>'Cash → MoMo Deposits','expenses'=>'Expenses','payroll'=>'Payroll & Staff Cost','providers'=>'Provider Payments','revenue'=>'Room & Extras Revenue','profit'=>'Profit Review','activity'=>'Audit Trail'];
 if($page==='corrections'&&in_array($_SERVER['REQUEST_METHOD']??'GET',['GET','HEAD'],true)){header('Location: '.access_url('financial-corrections.php'));exit;}
-if(!isset($pages[$page]))$page='overview';$error='';$notice='';$data=[];$events=[];$cash=[];$unmatched=[];$staff=[];$expenses=[];$form=is_string($_GET['form']??null)?$_GET['form']:'';$id=max(0,(int)($_GET['id']??0));$type=is_string($_GET['type']??null)?$_GET['type']:'';
+if(!isset($pages[$page]))$page='overview';$error='';$notice='';$data=[];$events=[];$cash=[];$staff=[];$expenses=[];$form=is_string($_GET['form']??null)?$_GET['form']:'';$id=max(0,(int)($_GET['id']??0));$type=is_string($_GET['type']??null)?$_GET['type']:'';
 if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&$form==='payroll_request'){header('Location: '.access_url('payroll.php').'#payroll-action');exit;}
 if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&$form==='provider_request'){header('Location: '.access_url('purchases.php?page=new&type=provider').'#purchase-action');exit;}
 $today=$s->today();$period=is_string($_GET['period']??null)&&$_GET['period']==='month'?'month':'week';$date=is_string($_GET['date']??null)?$_GET['date']:$today;$start=is_string($_GET['start']??null)?$_GET['start']:(new DateTimeImmutable($today))->modify($period==='month'?'first day of this month':'monday this week')->format('Y-m-d');
@@ -19,7 +19,19 @@ try{
  if($page==='weekly'&&!$s->canPostLate($actor)){access_service()->audit($actor,'finance.weekly_access_denied','finance',null,'denied');throw new \Tivoli\Security\PermissionDenied('Only the designated finance owner may view Weekly Reconciliation.');}
  if($_SERVER['REQUEST_METHOD']==='GET'&&$form==='pay_cost'&&$type==='request'&&\Tivoli\Repository\PurchaseAccounting::entries(access_service()->repo,'provider',$id)){(new \Tivoli\Service\PurchaseCorrectionService(access_service()))->source($actor,'provider',$id);header('Location: '.access_url('financial-corrections.php?area=purchases&source_type=provider&source_id='.$id).'#purchase-correction-action');exit;}
  $ready=$s->installed();if(!$ready)throw new RuntimeException('Finance is built but not activated in this database. An administrator must complete the reviewed setup before recording finance events.');
- if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&in_array($form,['deposit_confirm','receipt_match'],true)){$sourceKind=$form==='deposit_confirm'?'deposit':($type?:'payment');$dispute=\Tivoli\Service\CashDiscrepancyService::caseId(access_service()->repo,$sourceKind,$id);if($dispute){header('Location: '.access_url('finance.php?page=discrepancies&id='.$dispute).'#discrepancy-action');exit;}if(\Tivoli\Service\CashDiscrepancyService::hasWalletAllocation(access_service()->repo,$sourceKind,$id)||($form==='receipt_match'&&access_service()->repo->run("SELECT id FROM finance_events WHERE kind='receipt_matched' AND target_type=? AND target_id=? LIMIT 1",[$sourceKind,(string)$id])->fetchColumn())){header('Location: '.access_url('finance.php?page=discrepancies&type='.$sourceKind.'&source_id='.$id).'#discrepancy-action');exit;}}
+ if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&$form==='receipt_match'){
+  $target=$id&&in_array($type,['','payment','income'],true)
+      ? ['page'=>'discrepancies','type'=>$type?:'payment','source_id'=>$id]
+      : ['page'=>'daily','date'=>$date];
+  header('Location: '.access_url('finance.php?'.http_build_query($target)).($id?'#discrepancy-action':''));exit;
+ }
+ if(($_SERVER['REQUEST_METHOD']??'GET')==='GET'&&$form==='deposit_confirm'){
+  $dispute=\Tivoli\Service\CashDiscrepancyService::caseId(access_service()->repo,'deposit',$id);
+  if($dispute||\Tivoli\Service\CashDiscrepancyService::hasWalletAllocation(access_service()->repo,'deposit',$id)){
+   $target=['page'=>'discrepancies']+($dispute?['id'=>$dispute]:['type'=>'deposit','source_id'=>$id]);
+   header('Location: '.access_url('finance.php?'.http_build_query($target)).'#discrepancy-action');exit;
+  }
+ }
  foreach([$date,$start] as $d){$p=DateTimeImmutable::createFromFormat('!Y-m-d',$d);if(!$p||$p->format('Y-m-d')!==$d||$d>$today)throw new RuntimeException('Choose valid dates no later than today.');}
  if($page==='weekly'){$period='week';$start=is_string($_GET['start']??null)?$start:$s->priorWeekStart();}
  else $start=(new DateTimeImmutable($start))->modify($period==='month'?'first day of this month':'monday this week')->format('Y-m-d');
@@ -69,11 +81,11 @@ try{
    $cs=new \Tivoli\Service\InventoryCostingService(access_service());$cs->permit($actor);$costing=$cs->period($actor,$start,$end,$periodSummary['profit']);
    $saved=$r->run("SELECT kind,payload FROM finance_events WHERE target_type='period' AND target_id=? AND kind IN ('period_locked','period_reopened') ORDER BY id DESC LIMIT 1",[$period.':'.$start])->fetch();if($saved&&$saved['kind']==='period_locked'){$d=json_decode($saved['payload'],true,512,JSON_THROW_ON_ERROR);$costing=isset($d['snapshot']['stock_costing'])?$d['snapshot']['stock_costing']+['retained'=>true]:['saved_missing'=>true];}
   }
-  return ['costing'=>$costing,'payment_log'=>$page==='payments'?\Tivoli\Service\FinancePaymentLog::read(access_service(),$actor,$_GET):[],'income_rows'=>array_values(array_filter($events,fn($e)=>$e['kind']==='income_recorded')),'cash'=>$cash,'events'=>$events,'staff'=>$staff,'expenses'=>$expenses,'summary'=>$periodSummary,'unmatched'=>$admin?$s->unmatched($date):[],'activation'=>$r->run('SELECT * FROM finance_schema WHERE id=1')->fetch()];
+  return ['costing'=>$costing,'payment_log'=>$page==='payments'?\Tivoli\Service\FinancePaymentLog::read(access_service(),$actor,$_GET):[],'income_rows'=>array_values(array_filter($events,fn($e)=>$e['kind']==='income_recorded')),'cash'=>$cash,'events'=>$events,'staff'=>$staff,'expenses'=>$expenses,'summary'=>$periodSummary,'momoDifferences'=>$page==='daily'&&$s->canPostLate($actor)?$s->openMoMoDiscrepancies($date):[],'activation'=>$r->run('SELECT * FROM finance_schema WHERE id=1')->fetch()];
  });
  if($page==='weekly')$weekly=$snapshot['weekly'];
  else{
- $costing=$snapshot['costing'];$paymentLog=$snapshot['payment_log'];$incomeRows=$snapshot['income_rows'];$cash=$snapshot['cash'];$events=$snapshot['events'];$staff=$snapshot['staff'];$expenses=$snapshot['expenses'];$data=$snapshot['summary'];$unmatched=$snapshot['unmatched'];
+ $costing=$snapshot['costing'];$paymentLog=$snapshot['payment_log'];$incomeRows=$snapshot['income_rows'];$cash=$snapshot['cash'];$events=$snapshot['events'];$staff=$snapshot['staff'];$expenses=$snapshot['expenses'];$data=$snapshot['summary'];$momoDifferences=$snapshot['momoDifferences'];
  }
 }catch(Throwable $e){if($_SERVER['REQUEST_METHOD']==='POST'){try{access_service()->audit($actor,'finance.form_rejected','finance',null,'denied',['evidence_attempted'=>isset($_FILES['evidence'])]);}catch(Throwable $auditError){http_response_code(503);}}$error=access_error($e);if($e instanceof \Tivoli\Security\PermissionDenied)http_response_code(403);elseif($e instanceof PDOException)http_response_code(503);elseif(!in_array(http_response_code(),[403,409,503],true))http_response_code(400);if($_SERVER['REQUEST_METHOD']==='POST'&&is_string($_POST['operation_key']??null)&&preg_match('/^[a-f0-9]{32}$/D',$_POST['operation_key']))$operationKey=$_POST['operation_key'];}
 function finance_url(array $q=[]):string{return access_url('finance.php?'.http_build_query($q));}

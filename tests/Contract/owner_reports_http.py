@@ -53,9 +53,23 @@ for entry in ['/auth/login.php', '/dashboard.php']:
     assert status == 302 and headers['Location'].endswith(route), entry
 body = admin.open(route)[2]
 sidebar = re.search(r'<aside class="app-sidebar".*?</aside>', body, re.S)[0]
-assert sidebar.count('title="Owner Reports"') == 1 and 'title="Today"' not in sidebar
+assert sidebar.count('title="Dashboard"') == 1 and 'title="Today"' not in sidebar
 assert re.search(r'class="app-brand"[^>]+href="[^"]+/owner_reports.php"', sidebar)
-print('PASS administrator home, old dashboard bookmark and sidebar open Owner Reports')
+assert '<title>Dashboard · Tivoli Guesthouse</title>' in body
+assert 'aria-label="Dashboard reports"' in body and 'Report Date' in body
+for removed in ('Tivoli Guesthouse · Owner Workspace', '<h1>Dashboard</h1>', 'Report Period',
+                'Open Payment Log for This Period', 'Open Owner Exceptions', 'Accra property time'):
+    assert removed not in body, removed
+print('PASS administrator home, old dashboard bookmark and sidebar open Dashboard')
+today_input = re.search(r'name="end" value="(\d{4}-\d{2}-\d{2})" max="\1"', body)
+assert today_input and 'Current snapshot' in body and 'Open Room Board' in body
+status, _, historical = admin.open(route + '?view=daily&end=2014-01-28')
+assert status == 200 and 'name="end" value="2014-01-28"' in historical
+assert 'Recorded occupancy at the end of 28/01/2014' in historical
+assert 'Current snapshot' not in historical and 'Open Room Board' not in historical
+assert 'Review Cash &amp; MoMo Discrepancies' not in historical
+assert 'view=daily&amp;start=2014-01-28&amp;end=2014-01-28&amp;detail=arrivals' in historical
+print('PASS Daily Overview defaults to today and selected dates scope historical room status and drill-downs')
 for view, text in [('daily', 'Room Status'), ('room', 'Room-Night Calendar'),
                    ('cash', 'Cash by Recorder'), ('extras', 'Charge Detail'), ('monthly', 'Six-Month Comparison')]:
     status, headers, body = admin.open(route + '?view=' + view)

@@ -58,9 +58,15 @@ $momo = $prior->execute($owner,'income_record',[
 ],bin2hex(random_bytes(16)))['id'];
 $lock = fn(string $outcome)=>$selection+['outcome'=>$outcome,'comment'=>'Synthetic review','evidence'=>'STATEMENT-'.$tag,
     'complete'=>'1','review_token'=>$s->weeklyReview($monday)['token']];
-rejectsWeek(fn()=>$command('week_decide',$lock('carry')),RuntimeException::class,'Match all MoMo receipts');
-$command('receipt_match',['type'=>'income','id'=>(string)$momo,'amount'=>'27.50','reference'=>'MATCH-'.$tag,
-    'evidence'=>'Synthetic wallet evidence','verified'=>'1']);
+checkWeek(!$s->weeklyReview($monday)['momoDifferences'],'Recorded MoMo payment creates no weekly close blocker');
+$discrepancy=new \Tivoli\Service\CashDiscrepancyService($a,$reviewDay.' 12:00:00');
+$source=$discrepancy->source($owner,'income',$momo);
+$reported=$discrepancy->execute($owner,'report',['type'=>'income','source_id'=>(string)$momo,
+    'source_token'=>$source['token'],'category'=>'short','reason'=>'Synthetic credit difference'],bin2hex(random_bytes(16)))['id'];
+rejectsWeek(fn()=>$command('week_decide',$lock('clean')),RuntimeException::class,'Resolve reported MoMo differences');
+$discrepancy->execute($owner,'credit',['id'=>(string)$reported,'version'=>$discrepancy->detail($owner,$reported)['version'],
+    'amount'=>'27.50','reference'=>'VERIFIED-'.$tag,'reason'=>'Synthetic merchant evidence confirms credit','verified'=>'1'],bin2hex(random_bytes(16)));
+checkWeek(!$s->weeklyReview($monday)['momoDifferences'],'Resolving an actual difference clears the weekly blocker');
 
 $r->run("INSERT INTO expense_submissions(submitted_by,expense_date,category_id,method,amount,vendor,reference_no,description)
     VALUES(?,?,?,'momo','9.25','Synthetic vendor',?,'Awaiting receipt')",[$owner,$monday,$category,$tag]);

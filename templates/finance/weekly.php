@@ -55,14 +55,11 @@ $outcomeLabel = static fn(array $event): string => match ($event['kind']) {
 <section class="card" id="weekly-exceptions" tabindex="-1">
     <h2><?=$closed?'Carried Exceptions':'Exceptions and Follow-Up'?></h2>
     <?php if (!$closed): ?>
-        <?php if ($weekly['unmatched']): ?>
-            <h3>Unmatched MoMo Receipts</h3>
-            <p>Match every receipt for this week against the wallet before locking.</p>
-            <ul><?php foreach ($weekly['unmatched'] as $receipt): ?>
-                <li><?=access_h(($receipt['source']==='income'?'Activity':'Guest').' Receipt #'.$receipt['id'].' · '.display_date($receipt['created_at']).' · '.fm(R::minor($receipt['amount'])))?>
-                    <?php if ($receipt['reference_no']): ?> · <?=access_h($receipt['reference_no'])?><?php endif ?>
-                    <?php finance_action('Match Wallet Evidence','receipt_match',$receipt['id'],$receipt['source']); ?>
-                </li>
+        <?php if ($weekly['momoDifferences']): ?>
+            <h3>Reported MoMo Differences</h3>
+            <p>Resolve these reported differences before locking.</p>
+            <ul><?php foreach ($weekly['momoDifferences'] as $difference): ?>
+                <li><a href="<?=access_h(finance_url(['page'=>'discrepancies','id'=>$difference['case_id']]))?>#discrepancy-action">Review Difference #<?=(int)$difference['case_id']?></a></li>
             <?php endforeach ?></ul>
         <?php endif ?>
         <?php if ($cashAtClose['outstanding']>0): ?>
@@ -103,7 +100,7 @@ $outcomeLabel = static fn(array $event): string => match ($event['kind']) {
                 <?php endif ?>
             </details>
         <?php endforeach ?>
-    <?php elseif ($closed || (!$weekly['unmatched'] && !$cashAtClose['outstanding'] && !$weekly['pendingRequests'])): ?>
+    <?php elseif ($closed || (!$weekly['momoDifferences'] && !$cashAtClose['outstanding'] && !$weekly['pendingRequests'])): ?>
         <p><?=$closed?'No expenses were carried by this review.':'No open exceptions were found for this week.'?></p>
     <?php endif ?>
 </section>

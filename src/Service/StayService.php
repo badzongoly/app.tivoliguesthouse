@@ -284,7 +284,7 @@ final class StayService
                 return ['booking_id'=>$bookingId,'audit'=>['incidental_id'=>(int)$this->repo->db->lastInsertId(),'amount_minor'=>$amount,'reason'=>$reason]];
             }
             $this->admin($actor);$q=$this->row('stay_incidentals',(int)($in['incidental_id'] ?? $id));
-            if ((int)$q['booking_id']!==$bookingId || $q['status']!=='pending' || (int)$q['submitted_by']===$actor || !in_array($in['decision'] ?? '',['approved','rejected'],true) || $reason==='') { throw new RuntimeException('A different administrator must review a pending request with a reason.'); }
+            if ((int)$q['booking_id']!==$bookingId || $q['status']!=='pending' || (int)$q['submitted_by']===$actor || !in_array($in['decision'] ?? '',['approved','rejected'],true)) { throw new RuntimeException('A different administrator must review a pending request.'); }
             $this->repo->run('UPDATE stay_incidentals SET status=?,reviewed_by=?,reviewed_at=?,review_reason=? WHERE id=?',[$in['decision'],$actor,$postedAt,$reason,$q['id']]);
             return ['booking_id'=>$bookingId,'audit'=>['incidental_id'=>$q['id'],'decision'=>$in['decision'],'reason'=>$reason]];
         }
@@ -516,12 +516,14 @@ final class StayService
                 .' WHERE p.booking_id=? ORDER BY p.id',[$bookingId])->fetchAll();
             $data['payments']=\Tivoli\Repository\ReceiptAccounting::project($this->repo,$data['payments']);
             $data['charge_corrections']=\Tivoli\Repository\ChargeAccounting::entries($this->repo,$bookingId);$data['original_room_charge']=$data['bill']['room'];foreach($data['charge_corrections'] as $entry)if($entry['data']['charge_type']==='room')$data['original_room_charge']-=$entry['amount_minor'];
-            $data['receipt_corrections']=(new FinanceService($this->access))->installed()?$this->repo->run("SELECT id,payload,created_at FROM finance_events WHERE kind='rc_posted' AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.booking_id'))=? ORDER BY id",[(string)$bookingId])->fetchAll():[];
+            $financeInstalled=(new FinanceService($this->access))->installed();
+            $data['finance_payment_cursor']=$financeInstalled?(int)$this->repo->run('SELECT payment_cursor FROM finance_schema WHERE id=1')->fetchColumn():null;
+            $data['receipt_corrections']=$financeInstalled?$this->repo->run("SELECT id,payload,created_at FROM finance_events WHERE kind='rc_posted' AND JSON_UNQUOTE(JSON_EXTRACT(payload,'$.booking_id'))=? ORDER BY id",[(string)$bookingId])->fetchAll():[];
             $data['can_recover_receipt']=$recovery && $b['status']==='checked_out'
                 && $data['bill']['checkout_balance']!==null && !$data['bill']['legacy_unknown'] && $data['bill']['balance']>0
                 && (new FinanceService($this->access))->canPostLate($actor);
             $data['lines']=$this->repo->run('SELECT * FROM booking_extras WHERE booking_id=? ORDER BY id',[$bookingId])->fetchAll();$data['incidentals']=$this->repo->run('SELECT * FROM stay_incidentals WHERE booking_id=? ORDER BY id',[$bookingId])->fetchAll();
-            $data['activity']=$this->repo->run("SELECT action,occurred_at created_at,details payload FROM security_audit WHERE target_type='booking' AND target_id=? AND action LIKE 'stay.%'".($this->repo->isAdmin($actor)?'':' AND actor_id=?').' ORDER BY id DESC LIMIT 100',$this->repo->isAdmin($actor)?[(string)$bookingId]:[(string)$bookingId,$actor])->fetchAll();
+            if($this->repo->isAdmin($actor))$data['activity']=$this->repo->run("SELECT action,occurred_at created_at,details payload FROM security_audit WHERE target_type='booking' AND target_id=? AND action LIKE 'stay.%' ORDER BY id DESC LIMIT 100",[(string)$bookingId])->fetchAll();
             $this->access->audit($actor,'stay.viewed','booking',(string)$bookingId,'succeeded');
         }
         return $data;

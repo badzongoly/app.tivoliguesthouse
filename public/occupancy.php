@@ -69,6 +69,17 @@ try {
         access_check_csrf();
         foreach($_POST as $value)if(!is_string($value))throw new RuntimeException('Invalid form input.');
         $input=$_POST;$action=$input['action'] ?? '';$operationKey=$input['operation_key'] ?? '';
+        // The named submit button confirms the reminders shown on the form.
+        if(($input['attest']??'')==='1'){
+            $checks=match($action){
+                'checkin'=>['identity_verified','payment_attested','room_checked'],
+                'checkout'=>['extras_checked','keys_returned'],
+                'secure_departure_room'=>['vacant','secured'],
+                default=>[],
+            };
+            $input+=array_fill_keys($checks,'1');
+            unset($input['attest']);
+        }
         if(in_array($action,['clean','inspect'],true)){access_service()->audit($actor,'housekeeping.obsolete_form','room',null,'denied');http_response_code(409);throw new RuntimeException('Use Housekeeping to retain the assigned cleaner, independent inspection and owner exceptions.');}
         if($action==='stock_count'){access_service()->audit($actor,'stockcount.obsolete_form','stock',null,'denied');http_response_code(409);throw new RuntimeException('Submit a Stock Count for owner review. Immediate stock adjustment is no longer available.');}
         if($action==='stock_in'){access_service()->audit($actor,'purchase.obsolete_stock_form','stock',null,'denied');http_response_code(409);throw new RuntimeException('Receive purchased stock through its approved Purchase Request to retain the cost and source link.');}
@@ -121,7 +132,7 @@ try {
         elseif(in_array($action,['area_audit','area_followup'],true))$query=['section'=>'areas','range'=>'all'];
         elseif(in_array($action,['room_save','fault','repair','release_fault','room_audit'],true))$query=['section'=>'rooms','tab'=>in_array($action,['fault','repair','release_fault'],true)?'faults':($action==='room_audit'?'audits':'master')];
         if($action==='extra_save'&&$catalogueView)$query+=\Tivoli\Domain\Stay\ExtrasCatalogue::filters($_GET);
-        header('Location: '.stay_url($query).'#'.(in_array($action,['clear_balance','allow_checkout'],true)?'stay-action':'stay-result'));exit;
+        header('Location: '.stay_url($query).'#'.(in_array($action,['clear_balance','allow_checkout'],true)?'stay-action':($action==='extra'?'stay-bill':'stay-result')));exit;
         }
     }
     if(isset($_GET['confirm'])&&is_string($_GET['confirm'])){
@@ -129,11 +140,12 @@ try {
         if(!$pending||$pending['actor']!==$actor||$pending['expires']<time())throw new RuntimeException('Confirmation expired. Review the guest account again.');
         $confirmation=$pending+['token'=>$token];$bookingId=(int)$pending['input']['booking_id'];
     }
+    if($bookingId&&$tab==='activity'&&!$isAdmin)throw new \Tivoli\Security\PermissionDenied('Only administrators can view Stay Activity.');
     $view=$loadStayView();
     $preparationFilter=is_string($_GET['preparation']??null)&&in_array($_GET['preparation'],['ready','needs_cleaning','cleaning','inspection','blocked'],true)?$_GET['preparation']:'all';
     $preparation=[];$stayPreparation=null;
     $housekeeping=new \Tivoli\Service\HousekeepingService(access_service());
-    if(!$bookingId&&$section==='board')$preparation=$housekeeping->roomSummaries($actor,$view['rooms']);
+    if(!$bookingId&&$section==='board'&&!($form==='checkin'&&$roomId))$preparation=$housekeeping->roomSummaries($actor,$view['rooms']);
     if($bookingId&&$view['booking']['status']==='checked_out')$stayPreparation=$housekeeping->preparationForStay($actor,$bookingId);
     if($section==='departures')$departureCases=$service->departureCases($actor);
     if($canAuthorizeDeparture&&in_array($form,['review_departure','departure_followup'],true)){
@@ -147,7 +159,9 @@ try {
     unset($_SESSION['stay_notice'],$_SESSION['stay_notice_operation']);
 }catch(Throwable $exception){
     $error=access_error($exception);$formValues=$_POST;
-    try{$view=$loadStayView();}catch(Throwable $unavailable){$view=[];}
+    if(!($bookingId&&$tab==='activity'&&!$isAdmin)){
+        try{$view=$loadStayView();}catch(Throwable $unavailable){$view=[];}
+    }
     if($section==='areas'){try{$areaAudits=$service->areaAudits($actor,array_intersect_key($_GET,array_flip(['week','range','before','history','history_before','audit_key'])));}catch(Throwable $ignored){}}
     if($exception instanceof \Tivoli\Security\PermissionDenied)http_response_code(403);elseif($exception instanceof PDOException)http_response_code(503);elseif(http_response_code()<400)http_response_code(400);
 }

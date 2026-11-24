@@ -70,7 +70,7 @@
             const method = form.elements.payment_type.value === 'momo' ? 'MoMo' : 'Cash';
             const room = form.dataset.roomLabel ? ' · Room ' + form.dataset.roomLabel : '';
             message = form.elements.guest_name.value + room + ' · ' + form.elements.amount.value
-                + ' GHS via ' + method + '. Confirm check-in and record the receipt?';
+                + ' GHS via ' + method + '. Confirm guest identity, room readiness and payment received?';
         } else if (form.hasAttribute('data-stay-payment')) {
             const method = form.elements.method.value === 'momo' ? 'MoMo' : 'Cash';
             message = 'Room ' + form.dataset.roomLabel + ' · ' + form.elements.amount.value
